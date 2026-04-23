@@ -2,7 +2,7 @@
 
 from collections.abc import Mapping, Sequence
 
-from .types import Conditions, FieldAvailability, FieldDef, Rule, Values
+from .types import Conditions, FieldAvailability, FieldDef, Foul, Rule, Values
 
 
 def umpire(fields: Mapping[str, FieldDef], rules: Sequence[Rule] = ()) -> "Umpire":
@@ -46,3 +46,42 @@ class Umpire:
             result[field_name] = FieldAvailability(required=required)
 
         return result
+
+    def play(
+        self,
+        before: Mapping[str, FieldAvailability],
+        after: Mapping[str, FieldAvailability],
+        values: Values,
+    ) -> Sequence[Foul]:
+        """
+        Compare availability state transitions and generate fouls for relevant changes.
+
+        Args:
+            before: Previous field availability state
+            after: Current field availability state
+            values: Current field values
+
+        Returns:
+            Sequence of fouls representing invalid transitions
+        """
+        fouls: list[Foul] = []
+
+        # Compare each field's availability between before and after states
+        for field_name in before:
+            if field_name in after:
+                after_avail = after[field_name]
+
+                # Check for transitions that would create fouls
+                # For example, if a field became required but has no value
+                if after_avail.required and field_name not in values:
+                    fouls.append(
+                        Foul(
+                            field=field_name,
+                            reason=f"Field '{field_name}' became required but has no value",
+                        )
+                    )
+
+                # Add more foul detection logic here as rules are implemented
+                # This is a simplified implementation for now
+
+        return fouls
