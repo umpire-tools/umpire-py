@@ -128,6 +128,12 @@ def test_email_check_operation() -> None:
     assert result.field == "email"
     assert "email" in result.reason.lower()
 
+    # Test non-string input
+    result = email_check(123, "email")
+    assert result is not None
+    assert result.field == "email"
+    assert "string" in result.reason.lower()
+
 
 def test_min_length_check_operation() -> None:
     """Test min_length check operation."""
@@ -143,6 +149,12 @@ def test_min_length_check_operation() -> None:
     assert result.field == "password"
     assert "8" in result.reason
 
+    # Test non-string input
+    result = min_length_check(123, "password")
+    assert result is not None
+    assert result.field == "password"
+    assert "string" in result.reason.lower()
+
 
 def test_url_check_operation() -> None:
     """Test url check operation."""
@@ -157,6 +169,12 @@ def test_url_check_operation() -> None:
     assert result is not None
     assert result.field == "website"
     assert "url" in result.reason.lower()
+
+    # Test non-string input
+    result = url_check(123, "website")
+    assert result is not None
+    assert result.field == "website"
+    assert "string" in result.reason.lower()
 
 
 def test_matches_check_operation() -> None:
@@ -184,6 +202,12 @@ def test_matches_check_operation() -> None:
     result = compiled_check("abc", "number_field")
     assert result is not None  # Error for invalid match with compiled pattern
     assert result.field == "number_field"
+
+    # Test non-string input
+    result = matches_check(123, "name_field")
+    assert result is not None
+    assert result.field == "name_field"
+    assert "string" in result.reason.lower()
 
 
 def test_integer_check_operation() -> None:
@@ -215,6 +239,12 @@ def test_max_length_check_operation() -> None:
     assert result.field == "text_field"
     assert "10" in result.reason
 
+    # Test non-string input
+    result = max_length_check(123, "text_field")
+    assert result is not None
+    assert result.field == "text_field"
+    assert "string" in result.reason.lower()
+
 
 def test_min_value_check_operation() -> None:
     """Test min_value check operation."""
@@ -230,6 +260,12 @@ def test_min_value_check_operation() -> None:
     assert result.field == "number_field"
     assert "5" in result.reason
 
+    # Test non-numeric input
+    result = min_value_check("not a number", "number_field")
+    assert result is not None
+    assert result.field == "number_field"
+    assert "number" in result.reason.lower()
+
 
 def test_max_value_check_operation() -> None:
     """Test max_value check operation."""
@@ -244,6 +280,12 @@ def test_max_value_check_operation() -> None:
     assert result is not None
     assert result.field == "number_field"
     assert "100" in result.reason
+
+    # Test non-numeric input
+    result = max_value_check("not a number", "number_field")
+    assert result is not None
+    assert result.field == "number_field"
+    assert "number" in result.reason.lower()
 
 
 def test_range_value_check_operation() -> None:
@@ -265,3 +307,9 @@ def test_range_value_check_operation() -> None:
     assert result is not None
     assert result.field == "number_field"
     assert "10" in result.reason and "100" in result.reason
+
+    # Test non-numeric input
+    result = range_check("not a number", "number_field")
+    assert result is not None
+    assert result.field == "number_field"
+    assert "number" in result.reason.lower()
