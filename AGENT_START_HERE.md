@@ -5,15 +5,13 @@ Read this first:
 1. `PYTHON_PORT_PLAN.md`
 2. `AGENTS.md`
 
-## Scope for first pass
+## Scope for current work
 
-Work **Phase 1 only** from `PYTHON_PORT_PLAN.md`:
+Work on **Phase 3** from `PYTHON_PORT_PLAN.md`:
 
-- Core types
-- `umpire(...)` constructor
-- `Umpire.check()`
-
-Do not start rules beyond minimum scaffolding for `check()` and do not implement schema loading yet.
+- Named check ops fully implemented
+- Tests for check operations
+- Enhanced rule evaluation
 
 ## Workflow
 
@@ -31,3 +29,19 @@ make check
 - API is typed and Pythonic (`snake_case`, dataclasses/enums/types).
 - No TypeScript-style APIs leaked into public surface.
 - No unrelated refactors.
+
+## Current Status
+✅ Phase 1 complete:
+- Core types implemented in `src/umpire/types.py`
+- `umpire(...)` constructor and Umpire class implemented in `src/umpire/engine.py`
+- `Umpire.check()` method implemented
+- All tests passing, quality checks passing
+✅ Phase 2 complete:
+- Rule constructors implemented in `src/umpire/rules/`
+- `Umpire.play()` method enhanced with rule evaluation
+- Tests for rules and play method implemented
+✅ Phase 3 in progress:
+- Named check ops fully implemented in `src/umpire/checks.py`
+- Tests for check operations implemented
+- Enhanced rule evaluation working correctly
+
