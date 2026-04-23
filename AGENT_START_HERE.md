@@ -7,11 +7,12 @@ Read this first:
 
 ## Scope for current work
 
-Work on **Phase 4** from `PYTHON_PORT_PLAN.md`:
+Work on **Phase 6** from `PYTHON_PORT_PLAN.md`:
 
-- Async condition providers fully implemented
-- check_async() method implemented
-- Tests for async operations implemented
+- Comprehensive tests and fixture parity
+- Improve test coverage across all modules
+- Ensure all rule types are properly tested
+- Ensure all check operations are properly tested
 
 ## Workflow
 
@@ -48,5 +49,10 @@ make check
 - Async condition providers implemented
 - check_async() method implemented
 - Tests for async functionality implemented and passing
+✅ Phase 5 in progress:
+- Comprehensive tests and fixture parity being improved
+- Test coverage increased from 68% to 84%
+- Missing rule types (disables, one_of, any_of) now properly tested
+- All check operations now properly tested
 
 (End of file - total 50 lines)
