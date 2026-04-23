@@ -7,12 +7,12 @@ Read this first:
 
 ## Scope for current work
 
-Work on **Phase 6** from `PYTHON_PORT_PLAN.md`:
+Work on **Phase 7** from `PYTHON_PORT_PLAN.md`:
 
-- Comprehensive tests and fixture parity
-- Improve test coverage across all modules
-- Ensure all rule types are properly tested
-- Ensure all check operations are properly tested
+- Packaging polish (API surface, docs, release checklist)
+- Final API surface review and cleanup
+- Documentation improvements
+- Release preparation
 
 ## Workflow
 
@@ -54,6 +54,12 @@ make check
 - Test coverage increased from 68% to 97%
 - Missing rule types (disables, one_of, any_of) now properly tested
 - All check operations now properly tested with comprehensive type checking
+- All schema modules fully covered
+- All async provider handling fully tested
+✅ Phase 6 in progress:
+- Packaging polish and API surface review
+- Documentation improvements
+- Release preparation
 - All schema modules fully covered
 - All async provider handling fully tested
 
