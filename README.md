@@ -29,6 +29,12 @@ uv run mypy src
 uv run pytest
 ```
 
+Or run everything at once:
+
+```bash
+make check
+```
+
 ## Build
 
 ```bash
@@ -36,3 +42,11 @@ uv build
 ```
 
 Build artifacts are written to `dist/`.
+
+## Make targets
+
+```bash
+make sync      # install/update dev environment
+make check     # lint + format-check + type-check + tests
+make build     # build source + wheel distributions
+```
