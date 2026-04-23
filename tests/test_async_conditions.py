@@ -63,19 +63,23 @@ async def test_check_async_with_async_provider() -> None:
 
 
 @pytest.mark.asyncio
-async def test_normalize_providers_with_async() -> None:
-    """Test normalize_providers with async providers."""
+async def test_normalize_providers_with_failing_provider() -> None:
+    """Test normalize_providers with a provider that raises TypeError."""
     from umpire.schema.providers import normalize_providers
 
-    # Test with mixed providers
+    # Create a provider that will raise TypeError when called
+    def failing_provider():
+        raise TypeError("Provider failed")
+
+    # Test with mixed providers including one that fails
     providers: dict[str, ConditionProvider] = {
-        "sync_value": lambda: True,
         "static_value": "static",
-        "async_value": True,  # Use a static value to avoid the warning
+        "failing_provider": failing_provider,
     }
 
-    # Normalize providers - async providers should remain as callables
+    # Normalize providers - the failing provider should remain as a callable
     normalized = normalize_providers(providers)
     assert "static_value" in normalized
-    assert "sync_value" in normalized
-    assert "async_value" in normalized
+    assert "failing_provider" in normalized
+    assert normalized["static_value"] == "static"
+    assert callable(normalized["failing_provider"])  # Should remain as callable
