@@ -23,6 +23,7 @@ from .rules import (
     one_of,
     requires,
 )
+from .schema import UmpireSchema, UmpireSchemaError
 from .types import (
     CheckError,
     FieldAvailability,
@@ -39,6 +40,8 @@ __all__ = [
     "Foul",
     "IsEmptyStrategy",
     "Umpire",
+    "UmpireSchema",
+    "UmpireSchemaError",
     "__version__",
     "any_of",
     "check",
