@@ -59,7 +59,10 @@ def example_basic_usage() -> None:
 
     # Print results
     for field_name, availability in result.items():
-        print(f"{field_name}: enabled={availability.enabled}, required={availability.required}, fair={availability.fair}")
+        print(
+            f"{field_name}: enabled={availability.enabled}, "
+            f"required={availability.required}, fair={availability.fair}"
+        )
 
 
 if __name__ == "__main__":
