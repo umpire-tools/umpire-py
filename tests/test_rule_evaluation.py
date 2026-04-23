@@ -161,6 +161,8 @@ def test_url_check_operation() -> None:
 
 def test_matches_check_operation() -> None:
     """Test matches check operation."""
+    import re
+
     matches_check = check_ops.matches(r"^[A-Z][a-z]+$")
 
     # Test valid match
@@ -172,6 +174,16 @@ def test_matches_check_operation() -> None:
     assert result is not None
     assert result.field == "name_field"
     assert "match" in result.reason.lower()
+
+    # Test with compiled regex pattern
+    compiled_pattern = re.compile(r"^\d+$")
+    compiled_check = check_ops.matches(compiled_pattern)
+    result = compiled_check("123", "number_field")
+    assert result is None  # No error for valid match with compiled pattern
+
+    result = compiled_check("abc", "number_field")
+    assert result is not None  # Error for invalid match with compiled pattern
+    assert result.field == "number_field"
 
 
 def test_integer_check_operation() -> None:
@@ -187,3 +199,69 @@ def test_integer_check_operation() -> None:
     assert result is not None
     assert result.field == "number_field"
     assert "integer" in result.reason.lower()
+
+
+def test_max_length_check_operation() -> None:
+    """Test max_length check operation."""
+    max_length_check = check_ops.max_length(10)
+
+    # Test valid length
+    result = max_length_check("short", "text_field")
+    assert result is None  # No error for valid length
+
+    # Test invalid length
+    result = max_length_check("this is too long", "text_field")
+    assert result is not None
+    assert result.field == "text_field"
+    assert "10" in result.reason
+
+
+def test_min_value_check_operation() -> None:
+    """Test min_value check operation."""
+    min_value_check = check_ops.min_value(5)
+
+    # Test valid value
+    result = min_value_check(10, "number_field")
+    assert result is None  # No error for valid value
+
+    # Test invalid value
+    result = min_value_check(3, "number_field")
+    assert result is not None
+    assert result.field == "number_field"
+    assert "5" in result.reason
+
+
+def test_max_value_check_operation() -> None:
+    """Test max_value check operation."""
+    max_value_check = check_ops.max_value(100)
+
+    # Test valid value
+    result = max_value_check(50, "number_field")
+    assert result is None  # No error for valid value
+
+    # Test invalid value
+    result = max_value_check(150, "number_field")
+    assert result is not None
+    assert result.field == "number_field"
+    assert "100" in result.reason
+
+
+def test_range_value_check_operation() -> None:
+    """Test range_value check operation."""
+    range_check = check_ops.range_value(10, 100)
+
+    # Test valid value within range
+    result = range_check(50, "number_field")
+    assert result is None  # No error for valid value
+
+    # Test invalid value below range
+    result = range_check(5, "number_field")
+    assert result is not None
+    assert result.field == "number_field"
+    assert "10" in result.reason and "100" in result.reason
+
+    # Test invalid value above range
+    result = range_check(150, "number_field")
+    assert result is not None
+    assert result.field == "number_field"
+    assert "10" in result.reason and "100" in result.reason
