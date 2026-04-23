@@ -5,9 +5,12 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 from .rules import (
+    AnyOfRule,
     CheckRule,
+    DisablesRule,
     EnabledWhenRule,
     FairWhenRule,
+    OneOfRule,
     RequiresRule,
 )
 from .types import Conditions, FieldAvailability, FieldDef, Foul, Rule, Values
@@ -95,6 +98,49 @@ class Umpire:
                             fair=False,
                             check_errors=current.check_errors,
                         )
+            elif isinstance(rule, DisablesRule):
+                # Evaluate disables rule
+                # Check if the source field has a value and condition is met (if specified)
+                if rule.source in values and (rule.when is None or rule.when(values, conditions)):
+                    # Disable the target fields
+                    for target in rule.targets:
+                        if target in result:
+                            current = result[target]
+                            result[target] = FieldAvailability(
+                                enabled=False,
+                                required=current.required,
+                                fair=current.fair,
+                                check_errors=current.check_errors,
+                            )
+            elif isinstance(rule, OneOfRule):
+                # Evaluate one_of rule
+                # Count how many of the branches are enabled/selected
+                enabled_count = 0
+                enabled_fields = []
+                for branch in rule.branches:
+                    if branch in values and values[branch] is not None:
+                        # For simplicity, we'll consider a field "enabled" if it has a value
+                        enabled_count += 1
+                        enabled_fields.append(branch)
+
+                # If more than one field is enabled, disable all but the first one
+                # (This is a simple implementation - could be more sophisticated)
+                if enabled_count > 1:
+                    # Disable all but the first enabled field
+                    for field in enabled_fields[1:]:
+                        if field in result:
+                            current = result[field]
+                            result[field] = FieldAvailability(
+                                enabled=False,
+                                required=current.required,
+                                fair=current.fair,
+                                check_errors=current.check_errors,
+                            )
+            elif isinstance(rule, AnyOfRule):
+                # Evaluate any_of rule
+                # For now, we'll just pass through - any_of rules would typically
+                # be used to group other rules, not directly affect field availability
+                pass
             elif isinstance(rule, CheckRule):
                 # Evaluate check rule - this affects check_errors
                 pass  # Check rules are evaluated separately

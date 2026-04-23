@@ -112,3 +112,78 @@ def test_check_rule_evaluation() -> None:
 
     assert "email" in result
     assert "password" in result
+
+
+def test_email_check_operation() -> None:
+    """Test email check operation."""
+    email_check = check_ops.email()
+
+    # Test valid email
+    result = email_check("test@example.com", "email")
+    assert result is None  # No error for valid email
+
+    # Test invalid email
+    result = email_check("invalid-email", "email")
+    assert result is not None
+    assert result.field == "email"
+    assert "email" in result.reason.lower()
+
+
+def test_min_length_check_operation() -> None:
+    """Test min_length check operation."""
+    min_length_check = check_ops.min_length(8)
+
+    # Test valid length
+    result = min_length_check("password123", "password")
+    assert result is None  # No error for valid length
+
+    # Test invalid length
+    result = min_length_check("short", "password")
+    assert result is not None
+    assert result.field == "password"
+    assert "8" in result.reason
+
+
+def test_url_check_operation() -> None:
+    """Test url check operation."""
+    url_check = check_ops.url()
+
+    # Test valid URL
+    result = url_check("https://example.com", "website")
+    assert result is None  # No error for valid URL
+
+    # Test invalid URL
+    result = url_check("not-a-url", "website")
+    assert result is not None
+    assert result.field == "website"
+    assert "url" in result.reason.lower()
+
+
+def test_matches_check_operation() -> None:
+    """Test matches check operation."""
+    matches_check = check_ops.matches(r"^[A-Z][a-z]+$")
+
+    # Test valid match
+    result = matches_check("Hello", "name_field")
+    assert result is None  # No error for valid match
+
+    # Test invalid match
+    result = matches_check("123invalid", "name_field")
+    assert result is not None
+    assert result.field == "name_field"
+    assert "match" in result.reason.lower()
+
+
+def test_integer_check_operation() -> None:
+    """Test integer check operation."""
+    integer_check = check_ops.integer()
+
+    # Test valid integer
+    result = integer_check(123, "number_field")
+    assert result is None  # No error for valid integer
+
+    # Test invalid integer (float)
+    result = integer_check(12.34, "number_field")
+    assert result is not None
+    assert result.field == "number_field"
+    assert "integer" in result.reason.lower()
