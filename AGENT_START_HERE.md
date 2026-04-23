@@ -7,11 +7,11 @@ Read this first:
 
 ## Scope for current work
 
-Work on **Phase 3** from `PYTHON_PORT_PLAN.md`:
+Work on **Phase 4** from `PYTHON_PORT_PLAN.md`:
 
-- Named check ops fully implemented
-- Tests for check operations
-- Enhanced rule evaluation
+- Async condition providers fully implemented
+- check_async() method implemented
+- Tests for async operations implemented
 
 ## Workflow
 
@@ -32,16 +32,21 @@ make check
 
 ## Current Status
 ✅ Phase 1 complete:
-- Core types implemented in `src/umpire/types.py`
-- `umpire(...)` constructor and Umpire class implemented in `src/umpire/engine.py`
-- `Umpire.check()` method implemented
+- Core types implemented in src/umpire/types.py
+- umpire(...) constructor and Umpire class implemented in src/umpire/engine.py
+- Umpire.check() method implemented
 - All tests passing, quality checks passing
 ✅ Phase 2 complete:
-- Rule constructors implemented in `src/umpire/rules/`
-- `Umpire.play()` method enhanced with rule evaluation
+- Rule constructors implemented in src/umpire/rules/
+- Umpire.play() method enhanced with rule evaluation
 - Tests for rules and play method implemented
-✅ Phase 3 in progress:
-- Named check ops fully implemented in `src/umpire/checks.py`
-- Tests for check operations implemented
-- Enhanced rule evaluation working correctly
+✅ Phase 3 complete:
+- Named check ops fully implemented in src/umpire/checks.py
+- Schema loading implemented in src/umpire/schema/
+- Expression compiler working correctly
+✅ Phase 4 complete:
+- Async condition providers implemented
+- check_async() method implemented
+- Tests for async functionality implemented and passing
 
+(End of file - total 50 lines)

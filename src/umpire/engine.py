@@ -1,6 +1,8 @@
 """Umpire engine implementation."""
 
+import asyncio
 from collections.abc import Mapping, Sequence
+from typing import Any
 
 from .rules import (
     CheckRule,
@@ -162,3 +164,51 @@ class Umpire:
                 # This is a simplified implementation for now
 
         return fouls
+
+    async def check_async(
+        self, values: Values, conditions: dict[str, Any] | None = None
+    ) -> Mapping[str, FieldAvailability]:
+        """
+        Check field availability based on current values and async conditions.
+
+        This method resolves async condition providers concurrently and then
+        evaluates field availability using the resolved conditions.
+
+        Args:
+            values: Current field values
+            conditions: Current conditions with potential async providers (optional)
+
+        Returns:
+            Mapping of field names to their availability information
+        """
+        if conditions is None:
+            conditions = {}
+
+        # Resolve async condition providers concurrently
+        resolved_conditions = {}
+        async_providers = {}
+        sync_providers = {}
+
+        # Separate async and sync providers
+        for key, provider in conditions.items():
+            from .schema.providers import is_async_provider
+
+            if is_async_provider(provider):
+                async_providers[key] = provider
+            else:
+                sync_providers[key] = provider
+
+        # Resolve sync providers first
+        from .schema.providers import normalize_providers
+
+        resolved_conditions.update(normalize_providers(sync_providers))
+
+        # Resolve async providers concurrently
+        if async_providers:
+            async_tasks = {key: provider() for key, provider in async_providers.items()}
+            async_results = await asyncio.gather(*async_tasks.values())
+            resolved_async = dict(zip(async_tasks.keys(), async_results, strict=False))
+            resolved_conditions.update(resolved_async)
+
+        # Use resolved conditions for the check
+        return self.check(values, resolved_conditions)
