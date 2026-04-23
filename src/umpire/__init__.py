@@ -1,14 +1,20 @@
 """umpire public package surface."""
 
+from .checks import (
+    CheckOp,
+    check_ops,
+    email,
+    integer,
+    matches,
+    max_length,
+    max_value,
+    min_length,
+    min_value,
+    range_value,
+    url,
+)
 from .engine import Umpire, umpire
 from .rules import (
-    AnyOfRule,
-    CheckRule,
-    DisablesRule,
-    EnabledWhenRule,
-    FairWhenRule,
-    OneOfRule,
-    RequiresRule,
     any_of,
     check,
     disables,
@@ -26,28 +32,32 @@ from .types import (
 )
 
 __all__ = [
-    "AnyOfRule",
     "CheckError",
-    "CheckRule",
-    "DisablesRule",
-    "EnabledWhenRule",
-    "FairWhenRule",
+    "CheckOp",
     "FieldAvailability",
     "FieldDef",
     "Foul",
     "IsEmptyStrategy",
-    "OneOfRule",
-    "RequiresRule",
     "Umpire",
     "__version__",
     "any_of",
     "check",
+    "check_ops",
     "disables",
+    "email",
     "enabled_when",
     "fair_when",
+    "integer",
+    "matches",
+    "max_length",
+    "max_value",
+    "min_length",
+    "min_value",
     "one_of",
+    "range_value",
     "requires",
     "umpire",
+    "url",
 ]
 
 __version__ = "0.1.0"
