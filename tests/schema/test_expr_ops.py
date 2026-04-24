@@ -1,5 +1,7 @@
 """Tests for expression compiler."""
 
+import pytest
+
 from umpire.schema.expr import ExpressionCompiler
 
 
@@ -78,6 +80,39 @@ def test_compile_field_in_cond() -> None:
     result = predicate({}, {"valid_plans": ["basic", "pro", "enterprise"]})
     assert result is False
 
-    # Test with non-list condition (should return False)
-    result = predicate({"plan_id": "pro"}, {"valid_plans": "not_a_list"})
-    assert result is False
+    with pytest.raises(ValueError, match="must be an array"):
+        predicate({"plan_id": "pro"}, {"valid_plans": "not_a_list"})
+
+
+def test_compile_expr_rejects_unknown_field() -> None:
+    """Expression validation should catch bad field references."""
+    compiler = ExpressionCompiler(field_names={"email"})
+
+    with pytest.raises(ValueError, match="Unknown field"):
+        compiler.compile_expr({"op": "present", "field": "missing"})
+
+
+def test_compile_expr_rejects_unknown_condition() -> None:
+    """Expression validation should catch bad condition references."""
+    compiler = ExpressionCompiler(condition_names={"isAdmin"})
+
+    with pytest.raises(ValueError, match="Unknown condition"):
+        compiler.compile_expr({"op": "cond", "condition": "missing"})
+
+
+def test_compile_expr_supports_boolean_composition() -> None:
+    """JSON expressions can compose smaller predicates."""
+    compiler = ExpressionCompiler(field_names={"email"}, condition_names={"isAdmin"})
+    predicate = compiler.compile_expr(
+        {
+            "op": "or",
+            "exprs": [
+                {"op": "present", "field": "email"},
+                {"op": "cond", "condition": "isAdmin"},
+            ],
+        }
+    )
+
+    assert predicate({}, {"isAdmin": False}) is False
+    assert predicate({}, {"isAdmin": True}) is True
+    assert predicate({"email": "a@example.com"}, {"isAdmin": False}) is True

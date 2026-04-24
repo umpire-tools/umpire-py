@@ -9,7 +9,7 @@ Read this first:
 
 Work from **Recovery execution order** in `PYTHON_PORT_PLAN.md`.
 
-Start with **R5: Schema loading and validation** unless the user asks for a
+Start with **R6: Async hardening** unless the user asks for a
 narrower task.
 
 The current package is a scaffold, not a complete port. Do not continue
@@ -50,11 +50,17 @@ What exists:
     carries transition `reason` metadata.
   - `play()` now recommends resets only for newly disabled or newly foul
     satisfied values.
+- R5 schema recovery is complete for the current supported JSON subset:
+  - Schema loading parses fields, conditions, rules, check ops, expressions,
+    and excluded warning metadata.
+  - Schema validation rejects unknown fields, unknown expression ops, unknown
+    check ops, and malformed expression shapes.
+  - Expression compilation now raises on invalid `fieldInCond` runtime
+    condition shapes instead of silently returning `False`.
 
 Known gaps:
 
-- Schema loading drops rules and conditions.
-- Expression compilation is still narrow and too permissive in places.
 - Async provider handling still needs the R6 hardening pass.
+- R7 docs/API/release polish remains after async hardening.
 
 Use `PYTHON_PORT_PLAN.md` as the source of truth.

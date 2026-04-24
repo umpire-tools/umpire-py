@@ -6,6 +6,7 @@ from umpire import (
     IsEmptyStrategy,
     UmpireSchema,
     UmpireSchemaError,
+    umpire,
 )
 
 
@@ -105,3 +106,103 @@ def test_schema_build() -> None:
     assert schema.version == 1
     assert schema.conditions == {"is_admin": True}
     assert schema.rules == []
+
+
+def test_schema_from_json_obj_parses_rules() -> None:
+    """Schema loading should produce usable Python rules."""
+    json_obj = {
+        "version": 1,
+        "conditions": {
+            "isAdmin": {"type": "boolean"},
+            "validPlans": {"type": "string[]"},
+        },
+        "fields": {
+            "email": {"required": True, "isEmpty": "string"},
+            "discount": {},
+            "plan": {"default": "basic", "isEmpty": "string"},
+        },
+        "rules": [
+            {
+                "type": "enabledWhen",
+                "field": "discount",
+                "when": {"op": "cond", "condition": "isAdmin"},
+                "reason": "Admin only",
+            },
+            {
+                "type": "fairWhen",
+                "field": "plan",
+                "when": {"op": "fieldInCond", "field": "plan", "condition": "validPlans"},
+                "reason": "Plan unavailable",
+            },
+            {"type": "check", "field": "email", "op": "email", "reason": "Bad email"},
+        ],
+    }
+
+    schema = UmpireSchema.from_json_obj(json_obj)
+    u = umpire(schema.fields, schema.rules)
+
+    result = u.check(
+        {"email": "not-email", "plan": "enterprise"},
+        {"isAdmin": False, "validPlans": ["basic", "pro"]},
+    )
+
+    assert result["discount"].enabled is False
+    assert result["discount"].reason == "Admin only"
+    assert result["plan"].fair is False
+    assert result["plan"].reason == "Plan unavailable"
+    assert result["email"].check_errors[0].reason == "Bad email"
+
+
+def test_schema_from_json_obj_rejects_unknown_rule_field() -> None:
+    """Rule field references must be validated."""
+    json_obj = {
+        "version": 1,
+        "fields": {"email": {}},
+        "rules": [
+            {"type": "enabledWhen", "field": "missing", "when": {"op": "cond", "condition": "ok"}}
+        ],
+        "conditions": {"ok": {"type": "boolean"}},
+    }
+
+    with pytest.raises(UmpireSchemaError, match="unknown field"):
+        UmpireSchema.from_json_obj(json_obj)
+
+
+def test_schema_from_json_obj_rejects_unknown_expression_op() -> None:
+    """Expression ops should fail clearly when unknown."""
+    json_obj = {
+        "version": 1,
+        "fields": {"email": {}},
+        "conditions": {"ok": {"type": "boolean"}},
+        "rules": [
+            {
+                "type": "enabledWhen",
+                "field": "email",
+                "when": {"op": "mystery", "condition": "ok"},
+            }
+        ],
+    }
+
+    with pytest.raises(UmpireSchemaError, match="unknown expression op"):
+        UmpireSchema.from_json_obj(json_obj)
+
+
+def test_schema_from_json_obj_preserves_excluded_warnings() -> None:
+    """Excluded rules are warning metadata, not hard failures."""
+    json_obj = {
+        "version": 1,
+        "fields": {"email": {}},
+        "rules": [],
+        "excluded": [
+            {
+                "type": "custom",
+                "field": "email",
+                "description": "Custom callback cannot be serialized",
+            }
+        ],
+    }
+
+    schema = UmpireSchema.from_json_obj(json_obj)
+
+    assert len(schema.excluded) == 1
+    assert schema.warnings == ("Excluded rule custom: Custom callback cannot be serialized",)
