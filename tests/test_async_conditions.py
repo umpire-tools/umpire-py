@@ -1,6 +1,7 @@
 """Tests for async condition providers."""
 
 import asyncio
+import time
 from typing import Any
 
 import pytest
@@ -63,23 +64,83 @@ async def test_check_async_with_async_provider() -> None:
 
 
 @pytest.mark.asyncio
-async def test_normalize_providers_with_failing_provider() -> None:
-    """Test normalize_providers with a provider that raises TypeError."""
+async def test_normalize_providers_propagates_failing_provider() -> None:
+    """Provider failures should not be silently converted into values."""
     from umpire.schema.providers import normalize_providers
 
-    # Create a provider that will raise TypeError when called
     def failing_provider():
         raise TypeError("Provider failed")
 
-    # Test with mixed providers including one that fails
     providers: dict[str, ConditionProvider] = {
         "static_value": "static",
         "failing_provider": failing_provider,
     }
 
-    # Normalize providers - the failing provider should remain as a callable
-    normalized = normalize_providers(providers)
-    assert "static_value" in normalized
-    assert "failing_provider" in normalized
-    assert normalized["static_value"] == "static"
-    assert callable(normalized["failing_provider"])  # Should remain as callable
+    with pytest.raises(TypeError, match="Provider failed"):
+        normalize_providers(providers)
+
+
+@pytest.mark.asyncio
+async def test_check_async_resolves_providers_concurrently() -> None:
+    """Async providers should resolve concurrently, not sequentially."""
+    fields = {"admin_field": FieldDef(required=False)}
+
+    from umpire import enabled_when
+
+    rules = [
+        enabled_when(
+            "admin_field",
+            when=lambda values, conditions: conditions["first"] and conditions["second"],
+        )
+    ]
+    u = umpire(fields, rules)
+
+    async def first_provider() -> bool:
+        await asyncio.sleep(0.05)
+        return True
+
+    async def second_provider() -> bool:
+        await asyncio.sleep(0.05)
+        return True
+
+    start = time.perf_counter()
+    result = await u.check_async({}, {"first": first_provider, "second": second_provider})
+    elapsed = time.perf_counter() - start
+
+    assert result["admin_field"].enabled is True
+    assert elapsed < 0.09
+
+
+@pytest.mark.asyncio
+async def test_check_async_supports_sync_provider_returning_awaitable() -> None:
+    """Providers may be ordinary callables that return awaitables."""
+    fields = {"admin_field": FieldDef(required=False)}
+
+    from umpire import enabled_when
+
+    rules = [enabled_when("admin_field", when=lambda values, conditions: conditions["is_admin"])]
+    u = umpire(fields, rules)
+
+    async def resolve_admin() -> bool:
+        await asyncio.sleep(0)
+        return True
+
+    def provider():
+        return resolve_admin()
+
+    result = await u.check_async({}, {"is_admin": provider})
+
+    assert result["admin_field"].enabled is True
+
+
+@pytest.mark.asyncio
+async def test_check_async_propagates_async_provider_failure() -> None:
+    """Async provider failures should fail the check instead of being hidden."""
+    fields = {"admin_field": FieldDef(required=False)}
+    u = umpire(fields)
+
+    async def failing_provider() -> bool:
+        raise RuntimeError("condition exploded")
+
+    with pytest.raises(RuntimeError, match="condition exploded"):
+        await u.check_async({}, {"is_admin": failing_provider})

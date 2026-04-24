@@ -1,6 +1,7 @@
 """Umpire engine implementation."""
 
 import asyncio
+import inspect
 from collections.abc import Mapping, Sequence
 from typing import Any
 
@@ -351,7 +352,7 @@ class Umpire:
         return fouls
 
     async def check_async(
-        self, values: Values, conditions: dict[str, Any] | None = None
+        self, values: Values, conditions: Mapping[str, Any] | None = None
     ) -> Mapping[str, FieldAvailability]:
         """
         Check field availability based on current values and async conditions.
@@ -369,31 +370,20 @@ class Umpire:
         if conditions is None:
             conditions = {}
 
-        # Resolve async condition providers concurrently
-        resolved_conditions = {}
-        async_providers = {}
-        sync_providers = {}
+        resolved_conditions: dict[str, Any] = {}
+        async_keys: list[str] = []
+        async_values = []
 
-        # Separate async and sync providers
         for key, provider in conditions.items():
-            from .schema.providers import is_async_provider
-
-            if is_async_provider(provider):
-                async_providers[key] = provider
+            value = provider() if callable(provider) else provider
+            if inspect.isawaitable(value):
+                async_keys.append(key)
+                async_values.append(value)
             else:
-                sync_providers[key] = provider
+                resolved_conditions[key] = value
 
-        # Resolve sync providers first
-        from .schema.providers import normalize_providers
+        if async_values:
+            async_results = await asyncio.gather(*async_values)
+            resolved_conditions.update(dict(zip(async_keys, async_results, strict=True)))
 
-        resolved_conditions.update(normalize_providers(sync_providers))
-
-        # Resolve async providers concurrently
-        if async_providers:
-            async_tasks = {key: provider() for key, provider in async_providers.items()}
-            async_results = await asyncio.gather(*async_tasks.values())
-            resolved_async = dict(zip(async_tasks.keys(), async_results, strict=False))
-            resolved_conditions.update(resolved_async)
-
-        # Use resolved conditions for the check
         return self.check(values, resolved_conditions)

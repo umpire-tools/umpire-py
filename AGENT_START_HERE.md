@@ -9,8 +9,8 @@ Read this first:
 
 Work from **Recovery execution order** in `PYTHON_PORT_PLAN.md`.
 
-Start with **R6: Async hardening** unless the user asks for a
-narrower task.
+Start with **R7: Docs/API/release polish** unless the user asks for a narrower
+task.
 
 The current package is a scaffold, not a complete port. Do not continue
 packaging/release polish until the behavioral blockers in `PYTHON_PORT_PLAN.md`
@@ -57,10 +57,13 @@ What exists:
     check ops, and malformed expression shapes.
   - Expression compilation now raises on invalid `fieldInCond` runtime
     condition shapes instead of silently returning `False`.
+- R6 async hardening is complete:
+  - Static, sync, async, and awaitable-returning condition providers resolve.
+  - Async providers are resolved concurrently.
+  - Sync and async provider failures propagate instead of being hidden.
 
 Known gaps:
 
-- Async provider handling still needs the R6 hardening pass.
 - R7 docs/API/release polish remains after async hardening.
 
 Use `PYTHON_PORT_PLAN.md` as the source of truth.
