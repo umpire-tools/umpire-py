@@ -19,8 +19,10 @@ def example_basic_usage() -> None:
         "email": FieldDef(required=True, is_empty=IsEmptyStrategy.STRING),
         "account_type": FieldDef(required=True, default_value="personal"),
         "company_name": FieldDef(required=False, is_empty=IsEmptyStrategy.STRING),
+        "discount_override": FieldDef(),
         "plan_id": FieldDef(required=True, is_empty=IsEmptyStrategy.STRING),
-        "password": FieldDef(required=True),
+        "password": FieldDef(required=True, is_empty=IsEmptyStrategy.STRING),
+        "confirm_password": FieldDef(is_empty=IsEmptyStrategy.STRING),
     }
 
     # Define rules
@@ -31,6 +33,8 @@ def example_basic_usage() -> None:
             when=lambda values, conds: values.get("account_type") == "business",
             reason="Company name is required for business accounts",
         ),
+        # Enable confirm_password only after password is satisfied
+        requires("confirm_password", dependency="password"),
         # Enable discount override for admin users
         enabled_when(
             "discount_override",
@@ -53,7 +57,12 @@ def example_basic_usage() -> None:
 
     # Check field availability
     result = u.check(
-        values={"email": "user@example.com", "plan_id": "pro", "password": "password123"},
+        values={
+            "email": "user@example.com",
+            "plan_id": "pro",
+            "password": "password123",
+            "confirm_password": "password123",
+        },
         conditions={"is_admin": False, "valid_plans": ["basic", "pro", "enterprise"]},
     )
 
@@ -61,7 +70,8 @@ def example_basic_usage() -> None:
     for field_name, availability in result.items():
         print(
             f"{field_name}: enabled={availability.enabled}, "
-            f"required={availability.required}, fair={availability.fair}"
+            f"required={availability.required}, fair={availability.fair}, "
+            f"satisfied={availability.satisfied}, errors={availability.check_errors}"
         )
 
 

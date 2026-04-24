@@ -2,31 +2,19 @@
 
 Purpose: give implementation agents a concrete, Pythonic path to ship `umpire-py` as a reusable library.
 
-This started as a starter execution plan (not a full spec rewrite). It is now
-also the working recovery plan for completing the Python port.
+This started as a starter execution plan (not a full spec rewrite). It became
+the working recovery plan for completing the Python port.
 
-Current status: **not complete**. The existing package is a useful scaffold, and
-the local quality suite currently passes, but the tests are too permissive and
-several promised Umpire semantics are missing or incorrect.
+Current status: **recovery complete for the current Python package scope**.
+The package remains alpha, but R1-R7 below have been executed and committed.
+The local quality suite passes with `UV_CACHE_DIR=/tmp/uv-cache make check`.
 
 ---
 
 ## Completion audit
 
-Last reviewed locally after the initial Qwen3 Coder port.
-
-What works as a scaffold:
-
-- Package layout exists under `src/umpire`.
-- Public API is mostly Pythonic (`snake_case`, dataclasses, enums).
-- Core constructors exist for `requires`, `enabled_when`, `disables`, `one_of`,
-  `any_of`, `fair_when`, and `check`.
-- Basic check operation objects exist.
-- `check_async()` exists and resolves simple async providers concurrently.
-- `make check` passes when run with a writable uv cache, for example:
-  `UV_CACHE_DIR=/tmp/uv-cache make check`.
-
-Known blockers before calling the port complete:
+Initial audit after the Qwen3 Coder port found the following blockers, all of
+which are now addressed for the supported Python surface:
 
 1. `check(...)` rules are not evaluated by `Umpire.check()`, so invalid values
    do not populate `FieldAvailability.check_errors`.
@@ -50,8 +38,8 @@ Known blockers before calling the port complete:
    validate field references, expression ops, check ops, or excluded rules.
 9. Expression compilation only covers a tiny subset and often returns `False`
    where schema/runtime validation should raise a clear exception.
-10. Tests assert current placeholders in several places instead of the intended
-    behavior, so passing tests do not prove port completeness.
+10. Tests asserted placeholders in several places instead of the intended
+    behavior, so passing tests did not prove port completeness.
 
 Porting north star:
 
@@ -137,7 +125,7 @@ Use `dataclasses` + `Enum` + `typing`.
 
 - `FieldDef(required: bool = False, default_value: Any = None, is_empty: IsEmptyStrategy = PRESENT)`
 - `IsEmptyStrategy`: `STRING | NUMBER | BOOLEAN | ARRAY | PRESENT`
-- `FieldAvailability(enabled: bool, required: bool, fair: bool, check_errors: tuple[CheckError, ...])`
+- `FieldAvailability(enabled: bool, required: bool, fair: bool, satisfied: bool, reason: str | None, check_errors: tuple[CheckError, ...])`
 - `CheckError(field: str, reason: str)`
 - `Foul(field: str, reason: str, suggested_value: Any | None = None)`
 - `Rule` protocol or callable object (internal shape is implementation detail)
@@ -326,6 +314,13 @@ Work test-first. For each phase:
 | R5 | Schema loading and validation | JSON schema fields, rules, expressions, checks, conditions, and excluded warnings load or fail clearly |
 | R6 | Async hardening | Sync/static/async providers resolve correctly, async providers run concurrently, and provider failures propagate |
 | R7 | Docs/API/release polish | README examples match behavior, public API is typed, and no TS-style names leak into Python APIs |
+
+Completion status:
+
+- R1-R4 complete in commit `b75aead`.
+- R5 complete in commit `c306557`.
+- R6 complete in commit `56feaab`.
+- R7 complete after README/example/plan polish.
 
 Suggested R1 test list:
 

@@ -9,12 +9,11 @@ Read this first:
 
 Work from **Recovery execution order** in `PYTHON_PORT_PLAN.md`.
 
-Start with **R7: Docs/API/release polish** unless the user asks for a narrower
-task.
+The R1-R7 recovery plan is complete for the current Python package scope.
+Start from the user's next request.
 
-The current package is a scaffold, not a complete port. Do not continue
-packaging/release polish until the behavioral blockers in `PYTHON_PORT_PLAN.md`
-are resolved.
+The package remains alpha, but the previous behavioral blockers in
+`PYTHON_PORT_PLAN.md` have been addressed for the supported surface.
 
 ## Workflow
 
@@ -35,7 +34,7 @@ make check
 
 ## Current Status
 
-Audit result: **not complete**.
+Audit result: **recovery complete for current scope**.
 
 What exists:
 
@@ -64,6 +63,8 @@ What exists:
 
 Known gaps:
 
-- R7 docs/API/release polish remains after async hardening.
+- Package remains alpha until exercised by downstream integrations.
+- The schema loader intentionally supports a practical `@umpire/json` subset,
+  not every upstream helper surface.
 
 Use `PYTHON_PORT_PLAN.md` as the source of truth.
