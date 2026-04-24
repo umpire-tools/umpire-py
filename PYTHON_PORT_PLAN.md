@@ -2,7 +2,63 @@
 
 Purpose: give implementation agents a concrete, Pythonic path to ship `umpire-py` as a reusable library.
 
-This is a starter execution plan (not a full spec rewrite).
+This started as a starter execution plan (not a full spec rewrite). It is now
+also the working recovery plan for completing the Python port.
+
+Current status: **not complete**. The existing package is a useful scaffold, and
+the local quality suite currently passes, but the tests are too permissive and
+several promised Umpire semantics are missing or incorrect.
+
+---
+
+## Completion audit
+
+Last reviewed locally after the initial Qwen3 Coder port.
+
+What works as a scaffold:
+
+- Package layout exists under `src/umpire`.
+- Public API is mostly Pythonic (`snake_case`, dataclasses, enums).
+- Core constructors exist for `requires`, `enabled_when`, `disables`, `one_of`,
+  `any_of`, `fair_when`, and `check`.
+- Basic check operation objects exist.
+- `check_async()` exists and resolves simple async providers concurrently.
+- `make check` passes when run with a writable uv cache, for example:
+  `UV_CACHE_DIR=/tmp/uv-cache make check`.
+
+Known blockers before calling the port complete:
+
+1. `check(...)` rules are not evaluated by `Umpire.check()`, so invalid values
+   do not populate `FieldAvailability.check_errors`.
+2. `any_of(...)` is currently a no-op instead of OR semantics across compatible
+   inner rules.
+3. `requires(field, dependency=...)` stores the dependency but does not evaluate
+   dependency satisfaction or dependency availability.
+4. `one_of(...)` uses a flat branch list and "disable all but first populated"
+   behavior, but Umpire core uses named branches and previous-state assisted
+   active-branch resolution.
+5. Disabled fields can still report `required=True`; Umpire core semantics say
+   disabled fields are not required.
+6. `play(...)` is not transition-correct. It currently fabricates missing
+   required-value fouls and misses the core reset recommendation behavior:
+   suggest resets only for fields that became disabled or foul and still hold a
+   stale satisfied value.
+7. Field satisfaction and required-ness are conflated. Umpire core keeps
+   structural availability (`enabled`, `required`, `fair`) separate from whether
+   the current value is satisfied/present.
+8. Schema loading parses fields only, drops rules and conditions, and does not
+   validate field references, expression ops, check ops, or excluded rules.
+9. Expression compilation only covers a tiny subset and often returns `False`
+   where schema/runtime validation should raise a clear exception.
+10. Tests assert current placeholders in several places instead of the intended
+    behavior, so passing tests do not prove port completeness.
+
+Porting north star:
+
+- Match Umpire semantics, not TypeScript names or implementation shape.
+- Keep the Python API small and Pythonic.
+- Prefer focused parity tests and simple dataclass-based internals over a
+  line-by-line port.
 
 ---
 
@@ -252,7 +308,71 @@ Nice-to-have after baseline:
 
 ---
 
-## Execution order
+## Recovery execution order
+
+Work test-first. For each phase:
+
+1. Add failing tests that describe the intended Umpire semantics.
+2. Implement the smallest Pythonic change that passes them.
+3. Run `UV_CACHE_DIR=/tmp/uv-cache make check`.
+4. Update this plan if the phase uncovers a new semantic decision.
+
+| Phase | Content | Completion gate |
+|---|---|---|
+| R1 | Replace placeholder tests with contract/parity tests | Tests fail against current placeholders for `check`, `requires`, `any_of`, `one_of`, `play`, and schema rules |
+| R2 | Core state model and emptiness | `enabled`, `required`, `fair`, value satisfaction, defaults, and `IsEmptyStrategy` are distinct and covered |
+| R3 | Rule evaluation semantics | `requires`, `enabled_when`, `disables`, `fair_when`, `check`, `any_of`, and `one_of` match the intended Umpire behavior |
+| R4 | Transition semantics | `play()` only reports before-to-after reset recommendations for newly disabled or newly foul satisfied values |
+| R5 | Schema loading and validation | JSON schema fields, rules, expressions, checks, conditions, and excluded warnings load or fail clearly |
+| R6 | Async hardening | Sync/static/async providers resolve correctly, async providers run concurrently, and provider failures propagate |
+| R7 | Docs/API/release polish | README examples match behavior, public API is typed, and no TS-style names leak into Python APIs |
+
+Suggested R1 test list:
+
+- `check("email", check_ops.email())` adds one `CheckError` for invalid email
+  and none for valid or unsatisfied inactive values.
+- Disabled fields report `required=False`.
+- `requires("confirm", dependency="password")` requires dependency satisfaction
+  and dependency availability/fairness.
+- Multiple gate rules on the same target are ANDed.
+- `any_of([...])` implements OR across compatible rule constraints.
+- `one_of(...)` supports named branches and previous-state resolution.
+- `play(before, after, values)` returns no fouls for first evaluation or
+  unchanged snapshots.
+- `play(...)` recommends resetting a stale value only when that field became
+  disabled or foul.
+- `UmpireSchema.from_json_obj(...)` parses rules and raises on unknown fields or
+  unknown expression/check ops.
+- `fieldInCond` raises for non-array runtime conditions instead of silently
+  returning `False`.
+
+Implementation notes for R2-R4:
+
+- Consider adding `satisfied: bool` to `FieldAvailability` if it keeps the
+  Python model honest. If that public API expansion feels too large, keep
+  satisfaction internal but do not use `required` as a proxy for missing value.
+- Rule evaluation should be deterministic and stable across calls. Avoid
+  mutating caller-provided `values` or `conditions`.
+- Prefer a small internal evaluator over many ad hoc `isinstance` branches in
+  `Umpire.check()`. A light protocol/dataclass approach is enough; avoid a
+  heavy class hierarchy unless it demonstrably simplifies behavior.
+- Keep `check` rule errors separate from `fair_when`. `check` is a validation
+  error surface; `fair_when` is availability/foul semantics.
+- `play()` should compare real before/after availability, not recompute from
+  scratch unless the API is intentionally changed to accept snapshots.
+
+Implementation notes for R5:
+
+- Preserve Python public names even when parsing JSON names from `@umpire/json`.
+  For example, accept JSON `default`/`defaultValue` only at the schema boundary
+  and expose `default_value` in Python.
+- Validate `version == 1`.
+- Validate that all rule and expression field references exist.
+- Validate known expression ops and check ops.
+- Preserve `excluded` as warning-level metadata, not a hard error.
+- Build usable `Rule` objects from parsed schema rules.
+
+Historical phase table from the original starter plan:
 
 | Phase | Content |
 |---|---|

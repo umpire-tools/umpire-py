@@ -7,12 +7,14 @@ Read this first:
 
 ## Scope for current work
 
-Work on **Phase 7** from `PYTHON_PORT_PLAN.md`:
+Work from **Recovery execution order** in `PYTHON_PORT_PLAN.md`.
 
-- Packaging polish (API surface, docs, release checklist)
-- Final API surface review and cleanup
-- Documentation improvements
-- Release preparation
+Start with **R1: Replace placeholder tests with contract/parity tests** unless
+the user asks for a narrower task.
+
+The current package is a scaffold, not a complete port. Do not continue
+packaging/release polish until the behavioral blockers in `PYTHON_PORT_PLAN.md`
+are resolved.
 
 ## Workflow
 
@@ -32,35 +34,24 @@ make check
 - No unrelated refactors.
 
 ## Current Status
-✅ Phase 1 complete:
-- Core types implemented in src/umpire/types.py
-- umpire(...) constructor and Umpire class implemented in src/umpire/engine.py
-- Umpire.check() method implemented
-- All tests passing, quality checks passing
-✅ Phase 2 complete:
-- Rule constructors implemented in src/umpire/rules/
-- Umpire.play() method enhanced with rule evaluation
-- Tests for rules and play method implemented
-✅ Phase 3 complete:
-- Named check ops fully implemented in src/umpire/checks.py
-- Schema loading implemented in src/umpire/schema/
-- Expression compiler working correctly
-✅ Phase 4 complete:
-- Async condition providers implemented
-- check_async() method implemented
-- Tests for async functionality implemented and passing
-✅ Phase 5 complete:
-- Comprehensive tests and fixture parity achieved
-- Test coverage increased from 68% to 97%
-- Missing rule types (disables, one_of, any_of) now properly tested
-- All check operations now properly tested with comprehensive type checking
-- All schema modules fully covered
-- All async provider handling fully tested
-✅ Phase 6 in progress:
-- Packaging polish and API surface review
-- Documentation improvements
-- Release preparation
-- All schema modules fully covered
-- All async provider handling fully tested
 
-(End of file - total 50 lines)
+Audit result: **not complete**.
+
+What exists:
+
+- Core files and package layout are present.
+- Public constructors and check ops exist.
+- Basic async provider resolution exists.
+- `make check` can pass with a writable uv cache.
+
+Known gaps:
+
+- `check(...)` rules are ignored by `Umpire.check()`.
+- `any_of(...)` is a no-op.
+- `requires(..., dependency=...)` does not enforce dependency semantics.
+- `one_of(...)` does not model named branches or previous-state resolution.
+- `play(...)` does not implement Umpire transition reset semantics.
+- Schema loading drops rules and conditions.
+- Tests currently bless placeholders instead of proving parity.
+
+Use `PYTHON_PORT_PLAN.md` as the source of truth.
