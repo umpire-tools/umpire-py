@@ -6,7 +6,16 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from ..checks import check_ops
-from ..rules import any_of, check, disables, enabled_when, fair_when, one_of, requires
+from ..rules import (
+    CheckRule,
+    any_of,
+    disables,
+    either_of,
+    enabled_when,
+    fair_when,
+    one_of,
+    requires,
+)
 from ..types import FieldDef, IsEmptyStrategy, Rule
 from .expr import ExpressionCompiler
 
@@ -38,15 +47,18 @@ class UmpireSchema:
 
         fields = _parse_fields(_mapping(dict_obj, "fields", default={}))
         conditions = dict(_mapping(dict_obj, "conditions", default={}))
+        condition_types = _condition_types(conditions)
         compiler = ExpressionCompiler(
             field_names=fields.keys(),
             condition_names=conditions.keys() if conditions else None,
+            condition_types=condition_types,
         )
         rules = _parse_rules(
             _sequence(dict_obj, "rules", default=[]),
             field_names=set(fields),
             compiler=compiler,
         )
+        rules.extend(_parse_validators(_mapping(dict_obj, "validators", default={}), set(fields)))
         excluded = tuple(dict(entry) for entry in _sequence(dict_obj, "excluded", default=[]))
         warnings = tuple(_excluded_warning(entry) for entry in excluded)
 
@@ -157,8 +169,8 @@ def _parse_rule(
                         raise UmpireSchemaError("requires dependency must be a field or expression")
                 return parsed
             return [
-                requires(
-                    field, when=compiler.compile_expr(_mapping(rule_obj, "when")), reason=reason
+                enabled_when(
+                    field, compiler.compile_expr(_mapping(rule_obj, "when")), reason=reason
                 )
             ]
 
@@ -208,13 +220,57 @@ def _parse_rule(
             )
             return [any_of(inner)]
 
+        if rule_type == "eitherOf":
+            branches = _mapping(rule_obj, "branches")
+            parsed_branches = {
+                branch: _parse_rules(
+                    _sequence_value(branch_rules),
+                    field_names=field_names,
+                    compiler=compiler,
+                )
+                for branch, branch_rules in branches.items()
+                if isinstance(branch, str)
+            }
+            if len(parsed_branches) != len(branches):
+                raise UmpireSchemaError("eitherOf branch names must be strings")
+            return [either_of(_string(rule_obj, "group"), parsed_branches)]
+
         if rule_type == "check":
             field = _field(rule_obj, "field", field_names)
-            return [check(field, _parse_check_op(rule_obj, _optional_string(rule_obj, "reason")))]
+            return [
+                CheckRule(
+                    field,
+                    _parse_check_op(rule_obj, _optional_string(rule_obj, "reason")),
+                    affects_fair=True,
+                )
+            ]
     except ValueError as e:
         raise UmpireSchemaError(str(e)) from e
 
     raise UmpireSchemaError(f"unknown rule type: {rule_type}")
+
+
+def _parse_validators(validators: Mapping[str, Any], field_names: set[str]) -> list[Rule]:
+    rules: list[Rule] = []
+    for field_name, spec in validators.items():
+        field = _known_field(field_name, field_names)
+        if not isinstance(spec, Mapping):
+            raise UmpireSchemaError(f'Validator for "{field}" must be a dictionary')
+        reason = _optional_string(spec, "error")
+        rules.append(CheckRule(field, _parse_check_op(spec, reason), validation=True))
+    return rules
+
+
+def _condition_types(conditions: Mapping[str, Any]) -> dict[str, str]:
+    types: dict[str, str] = {}
+    for name, definition in conditions.items():
+        if not isinstance(definition, Mapping):
+            raise UmpireSchemaError(f'Condition "{name}" must be a dictionary')
+        condition_type = definition.get("type")
+        if not isinstance(condition_type, str):
+            raise UmpireSchemaError(f'Condition "{name}" must include a string type')
+        types[name] = condition_type
+    return types
 
 
 def _parse_check_op(rule_obj: Mapping[str, Any], reason: str | None) -> Any:

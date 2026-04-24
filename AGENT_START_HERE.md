@@ -13,7 +13,9 @@ The R1-R7 recovery plan is complete for the current Python package scope.
 Start from the user's next request.
 
 The package remains alpha, but the previous behavioral blockers in
-`PYTHON_PORT_PLAN.md` have been addressed for the supported surface.
+`PYTHON_PORT_PLAN.md` have been addressed for the supported surface. Upstream
+`@umpire/json` conformance fixtures now run locally when
+`~/Code/umpire/packages/json/conformance` is present.
 
 ## Workflow
 
@@ -60,11 +62,16 @@ What exists:
   - Static, sync, async, and awaitable-returning condition providers resolve.
   - Async providers are resolved concurrently.
   - Sync and async provider failures propagate instead of being hidden.
+- Upstream JSON conformance is now covered:
+  - `tests/schema/test_json_conformance.py` loads the fixture index from
+    `~/Code/umpire/packages/json/conformance`.
+  - The suite skips if the upstream fixture directory is unavailable.
+  - The local fixture and failure set passes under `make check`.
 
 Known gaps:
 
 - Package remains alpha until exercised by downstream integrations.
-- The schema loader intentionally supports a practical `@umpire/json` subset,
-  not every upstream helper surface.
+- The schema loader supports the upstream conformance fixture surface currently
+  present locally; future upstream fixture additions may require follow-up.
 
 Use `PYTHON_PORT_PLAN.md` as the source of truth.

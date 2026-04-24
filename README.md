@@ -12,7 +12,8 @@ the TypeScript package.
 `umpire-py` is an early Python port. The core runtime, JSON schema subset, async
 condition providers, and focused contract tests are implemented, but the package
 should still be treated as alpha until real downstream integration exercises the
-API.
+API. The local test suite also runs the upstream `@umpire/json` conformance
+fixtures when `~/Code/umpire/packages/json/conformance` is available.
 
 ## Installation
 

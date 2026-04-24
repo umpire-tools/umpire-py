@@ -50,6 +50,11 @@ def any_of(rules: Sequence[object]) -> "AnyOfRule":
     return AnyOfRule(list(rules))
 
 
+def either_of(group: str, branches: Mapping[str, Sequence[object]]) -> "EitherOfRule":
+    """Create a rule that passes when any branch's rules all pass."""
+    return EitherOfRule(group, {name: list(rules) for name, rules in branches.items()})
+
+
 def fair_when(field: str, when: Predicate, reason: str | None = None) -> "FairWhenRule":
     """Create a rule that makes a field fair (valid) based on conditions."""
     return FairWhenRule(field, when, reason)
@@ -107,6 +112,14 @@ class AnyOfRule:
 
 
 @dataclass(frozen=True)
+class EitherOfRule:
+    """Rule that passes if any branch passes."""
+
+    group: str
+    branches: dict[str, list[object]]
+
+
+@dataclass(frozen=True)
 class FairWhenRule:
     """Rule that makes a field fair (valid) based on conditions."""
 
@@ -121,6 +134,8 @@ class CheckRule:
 
     field: str
     op: "CheckOp"
+    affects_fair: bool = False
+    validation: bool = False
 
 
 class CheckOp(Protocol):

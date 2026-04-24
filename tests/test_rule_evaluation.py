@@ -209,7 +209,7 @@ def test_min_length_check_operation() -> None:
     result = min_length_check(123, "password")
     assert result is not None
     assert result.field == "password"
-    assert "string" in result.reason.lower()
+    assert "length" in result.reason.lower()
 
 
 def test_url_check_operation() -> None:
@@ -278,7 +278,7 @@ def test_integer_check_operation() -> None:
     result = integer_check(12.34, "number_field")
     assert result is not None
     assert result.field == "number_field"
-    assert "integer" in result.reason.lower()
+    assert "whole number" in result.reason.lower()
 
 
 def test_max_length_check_operation() -> None:
@@ -299,7 +299,7 @@ def test_max_length_check_operation() -> None:
     result = max_length_check(123, "text_field")
     assert result is not None
     assert result.field == "text_field"
-    assert "string" in result.reason.lower()
+    assert "length" in result.reason.lower()
 
 
 def test_min_value_check_operation() -> None:

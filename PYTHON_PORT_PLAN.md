@@ -5,9 +5,10 @@ Purpose: give implementation agents a concrete, Pythonic path to ship `umpire-py
 This started as a starter execution plan (not a full spec rewrite). It became
 the working recovery plan for completing the Python port.
 
-Current status: **recovery complete for the current Python package scope**.
-The package remains alpha, but R1-R7 below have been executed and committed.
-The local quality suite passes with `UV_CACHE_DIR=/tmp/uv-cache make check`.
+Current status: **recovery complete for the current Python package scope, with
+upstream JSON conformance fixtures passing locally**. The package remains alpha,
+but R1-R7 below have been executed and committed. The local quality suite passes
+with `UV_CACHE_DIR=/tmp/uv-cache make check`.
 
 ---
 
@@ -321,6 +322,9 @@ Completion status:
 - R5 complete in commit `c306557`.
 - R6 complete in commit `56feaab`.
 - R7 complete after README/example/plan polish.
+- JSON conformance added after R7 in response to review; the Python runtime now
+  runs the upstream fixture/failure set from
+  `~/Code/umpire/packages/json/conformance` when available.
 
 Suggested R1 test list:
 

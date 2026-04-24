@@ -13,6 +13,7 @@ class IsEmptyStrategy(Enum):
     NUMBER = "number"
     BOOLEAN = "boolean"
     ARRAY = "array"
+    OBJECT = "object"
     PRESENT = "present"
 
 
@@ -34,7 +35,10 @@ class FieldAvailability:
     fair: bool = True
     satisfied: bool = False
     reason: str | None = None
+    reasons: tuple[str, ...] = ()
     check_errors: tuple["CheckError", ...] = ()
+    valid: bool | None = None
+    error: str | None = None
 
 
 @dataclass(frozen=True)

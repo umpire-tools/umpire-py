@@ -69,11 +69,15 @@ class MatchesCheck(CheckOp):
         if isinstance(self.pattern, str):
             if not re.search(self.pattern, value):
                 return CheckError(
-                    field=field_name, reason=self.reason or f"Must match pattern: {self.pattern}"
+                    field=field_name,
+                    reason=self.reason or "Must match the required format",
                 )
         else:
             if not self.pattern.search(value):
-                return CheckError(field=field_name, reason=self.reason or "Must match pattern")
+                return CheckError(
+                    field=field_name,
+                    reason=self.reason or "Must match the required format",
+                )
 
         return None
 
@@ -86,13 +90,13 @@ class MinLengthCheck(CheckOp):
 
     def __call__(self, value: Any, field_name: str) -> CheckError | None:
         """Check if the string value has at least the minimum length."""
-        if not isinstance(value, str):
-            return CheckError(field=field_name, reason=self.reason or "Must be a string")
+        if not isinstance(value, (str, list, tuple)):
+            return CheckError(field=field_name, reason=self.reason or "Must have a length")
 
         if len(value) < self.minimum:
             return CheckError(
                 field=field_name,
-                reason=self.reason or f"Must be at least {self.minimum} characters long",
+                reason=self.reason or f"Must be at least {self.minimum} characters",
             )
 
         return None
@@ -106,13 +110,13 @@ class MaxLengthCheck(CheckOp):
 
     def __call__(self, value: Any, field_name: str) -> CheckError | None:
         """Check if the string value has at most the maximum length."""
-        if not isinstance(value, str):
-            return CheckError(field=field_name, reason="Must be a string")
+        if not isinstance(value, (str, list, tuple)):
+            return CheckError(field=field_name, reason=self.reason or "Must have a length")
 
         if len(value) > self.maximum:
             return CheckError(
                 field=field_name,
-                reason=self.reason or f"Must be at most {self.maximum} characters long",
+                reason=self.reason or f"Must be {self.maximum} characters or fewer",
             )
 
         return None
@@ -150,7 +154,7 @@ class MaxValueCheck(CheckOp):
 
         if value > self.maximum:
             return CheckError(
-                field=field_name, reason=self.reason or f"Must be at most {self.maximum}"
+                field=field_name, reason=self.reason or f"Must be {self.maximum} or less"
             )
 
         return None
@@ -184,7 +188,7 @@ class IntegerCheck(CheckOp):
     def __call__(self, value: Any, field_name: str) -> CheckError | None:
         """Check if the value is an integer."""
         if not isinstance(value, int) or isinstance(value, bool):
-            return CheckError(field=field_name, reason=self.reason or "Must be an integer")
+            return CheckError(field=field_name, reason=self.reason or "Must be a whole number")
 
         return None
 
@@ -205,6 +209,11 @@ def url(reason: str | None = None) -> UrlCheck:
 
 def matches(pattern: str | Pattern[str], reason: str | None = None) -> MatchesCheck:
     """Create a pattern matching check operation."""
+    if isinstance(pattern, str):
+        try:
+            re.compile(pattern)
+        except re.error as e:
+            raise ValueError(f"Invalid regex pattern: {e}") from e
     check = MatchesCheck(pattern=pattern)
     check.reason = reason
     return check

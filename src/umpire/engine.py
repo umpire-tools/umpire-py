@@ -9,6 +9,7 @@ from .rules import (
     AnyOfRule,
     CheckRule,
     DisablesRule,
+    EitherOfRule,
     EnabledWhenRule,
     FairWhenRule,
     OneOfRule,
@@ -31,6 +32,8 @@ def _is_satisfied(value: Any, field_def: FieldDef) -> bool:
         return (
             isinstance(value, Sequence) and not isinstance(value, (str, bytes)) and len(value) > 0
         )
+    if field_def.is_empty.value == "object":
+        return isinstance(value, Mapping) and len(value) > 0
     return value is not None
 
 
@@ -42,7 +45,10 @@ def _with_status(
     fair: bool | None = None,
     satisfied: bool | None = None,
     reason: str | None | object = _UNCHANGED,
+    reasons: tuple[str, ...] | None = None,
     check_errors: tuple[Any, ...] | None = None,
+    valid: bool | None | object = _UNCHANGED,
+    error: str | None | object = _UNCHANGED,
 ) -> FieldAvailability:
     """Create an updated immutable field status."""
     return FieldAvailability(
@@ -51,7 +57,26 @@ def _with_status(
         fair=current.fair if fair is None else fair,
         satisfied=current.satisfied if satisfied is None else satisfied,
         reason=current.reason if reason is _UNCHANGED else reason,  # type: ignore[arg-type]
+        reasons=current.reasons if reasons is None else reasons,
         check_errors=current.check_errors if check_errors is None else check_errors,
+        valid=current.valid if valid is _UNCHANGED else valid,  # type: ignore[arg-type]
+        error=current.error if error is _UNCHANGED else error,  # type: ignore[arg-type]
+    )
+
+
+def _append_reason(current: FieldAvailability, reason: str) -> tuple[str, tuple[str, ...]]:
+    if reason in current.reasons:
+        return current.reason or reason, current.reasons
+    return current.reason or reason, (*current.reasons, reason)
+
+
+def _combine_failures(failures: Sequence[FieldAvailability]) -> FieldAvailability:
+    first = failures[0]
+    reasons = tuple(reason for failure in failures for reason in failure.reasons)
+    return _with_status(
+        first,
+        reason=reasons[0] if reasons else first.reason,
+        reasons=reasons,
     )
 
 
@@ -102,63 +127,41 @@ class Umpire:
             if isinstance(rule, RequiresRule):
                 self._apply_requires(rule, values, conditions, result)
             elif isinstance(rule, EnabledWhenRule):
-                if rule.field in result:
-                    current = result[rule.field]
-                    if rule.when(values, conditions):
-                        result[rule.field] = _with_status(current, enabled=True, reason=None)
-                    else:
-                        result[rule.field] = _with_status(
-                            current,
-                            enabled=False,
-                            required=False,
-                            reason=rule.reason or "condition not met",
-                        )
+                self._apply_enabled_when(rule, values, conditions, result)
             elif isinstance(rule, FairWhenRule):
-                if rule.field in result:
-                    current = result[rule.field]
-                    if (
-                        not current.enabled
-                        or not current.satisfied
-                        or rule.when(values, conditions)
-                    ):
-                        result[rule.field] = _with_status(current, fair=True)
-                    else:
-                        result[rule.field] = _with_status(
-                            current,
-                            fair=False,
-                            reason=rule.reason or "selection is no longer valid",
-                        )
+                self._apply_fair_when(rule, values, conditions, result)
             elif isinstance(rule, DisablesRule):
-                source_active = (
-                    rule.source in result
-                    and result[rule.source].satisfied
-                    and (rule.when is None or rule.when(values, conditions))
-                )
-                if source_active:
-                    for target in rule.targets:
-                        if target in result:
-                            current = result[target]
-                            result[target] = _with_status(
-                                current,
-                                enabled=False,
-                                required=False,
-                                reason=rule.reason or f"overridden by {rule.source}",
-                            )
+                self._apply_disables(rule, values, conditions, result)
             elif isinstance(rule, OneOfRule):
                 self._apply_one_of(rule, values, previous_values, result)
             elif isinstance(rule, AnyOfRule):
                 self._apply_any_of(rule, values, conditions, previous_values, result)
+            elif isinstance(rule, EitherOfRule):
+                self._apply_either_of(rule, values, conditions, previous_values, result)
             elif isinstance(rule, CheckRule) and rule.field in result:
-                current = result[rule.field]
-                if current.enabled and current.satisfied:
-                    value = values.get(rule.field, self._fields[rule.field].default_value)
-                    error = rule.op(value, rule.field)
-                    if error is not None:
-                        result[rule.field] = _with_status(
-                            current, check_errors=(*current.check_errors, error)
-                        )
+                self._apply_check(rule, values, result)
+
+        self._stabilize_dependency_requires(values, conditions, result)
 
         return result
+
+    def _stabilize_dependency_requires(
+        self,
+        values: Values,
+        conditions: Conditions,
+        result: dict[str, FieldAvailability],
+    ) -> None:
+        dependency_rules = [
+            rule
+            for rule in self._rules
+            if isinstance(rule, RequiresRule) and rule.dependency is not None
+        ]
+        for _ in range(len(dependency_rules)):
+            before = dict(result)
+            for rule in dependency_rules:
+                self._apply_requires(rule, values, conditions, result)
+            if before == result:
+                return
 
     def _apply_requires(
         self,
@@ -181,16 +184,110 @@ class Umpire:
             )
             if dependency_ok and (rule.when is None or rule.when(values, conditions)):
                 return
+            reason, reasons = _append_reason(current, rule.reason or f"requires {rule.dependency}")
             result[rule.field] = _with_status(
                 current,
                 enabled=False,
                 required=False,
-                reason=rule.reason or f"requires {rule.dependency}",
+                reason=reason,
+                reasons=reasons,
             )
             return
 
         if rule.when is not None and rule.when(values, conditions):
             result[rule.field] = _with_status(current, required=True)
+
+    def _apply_enabled_when(
+        self,
+        rule: EnabledWhenRule,
+        values: Values,
+        conditions: Conditions,
+        result: dict[str, FieldAvailability],
+    ) -> None:
+        if rule.field not in result:
+            return
+        current = result[rule.field]
+        if rule.when(values, conditions):
+            return
+        reason, reasons = _append_reason(current, rule.reason or "condition not met")
+        result[rule.field] = _with_status(
+            current,
+            enabled=False,
+            required=False,
+            reason=reason,
+            reasons=reasons,
+        )
+
+    def _apply_fair_when(
+        self,
+        rule: FairWhenRule,
+        values: Values,
+        conditions: Conditions,
+        result: dict[str, FieldAvailability],
+    ) -> None:
+        if rule.field not in result:
+            return
+        current = result[rule.field]
+        if not current.enabled or not current.satisfied or rule.when(values, conditions):
+            result[rule.field] = _with_status(current, fair=True)
+            return
+        reason, reasons = _append_reason(current, rule.reason or "selection is no longer valid")
+        result[rule.field] = _with_status(
+            current,
+            fair=False,
+            reason=reason,
+            reasons=reasons,
+        )
+
+    def _apply_disables(
+        self,
+        rule: DisablesRule,
+        values: Values,
+        conditions: Conditions,
+        result: dict[str, FieldAvailability],
+    ) -> None:
+        source_active = (
+            rule.source == "" or (rule.source in result and result[rule.source].satisfied)
+        ) and (rule.when is None or rule.when(values, conditions))
+        if not source_active:
+            return
+        for target in rule.targets:
+            if target in result:
+                reason, reasons = _append_reason(
+                    result[target], rule.reason or f"overridden by {rule.source}"
+                )
+                result[target] = _with_status(
+                    result[target],
+                    enabled=False,
+                    required=False,
+                    reason=reason,
+                    reasons=reasons,
+                )
+
+    def _apply_check(
+        self,
+        rule: CheckRule,
+        values: Values,
+        result: dict[str, FieldAvailability],
+    ) -> None:
+        current = result[rule.field]
+        if not current.enabled or not current.satisfied:
+            return
+        value = values.get(rule.field, self._fields[rule.field].default_value)
+        error = rule.op(value, rule.field)
+        if error is None:
+            if rule.validation:
+                result[rule.field] = _with_status(current, valid=True, error=None)
+            return
+        result[rule.field] = _with_status(
+            current,
+            fair=False if rule.affects_fair else current.fair,
+            reason=error.reason if rule.affects_fair else current.reason,
+            reasons=(*current.reasons, error.reason) if rule.affects_fair else current.reasons,
+            check_errors=(*current.check_errors, error),
+            valid=False if rule.validation else current.valid,
+            error=error.reason if rule.validation else current.error,
+        )
 
     def _apply_any_of(
         self,
@@ -211,33 +308,30 @@ class Umpire:
                 if inner_rule.dependency is None and inner_rule.when is not None:
                     current = scratch[inner_rule.field]
                     if not inner_rule.when(values, conditions):
+                        reason, reasons = _append_reason(
+                            current, inner_rule.reason or "required condition not met"
+                        )
                         scratch[inner_rule.field] = _with_status(
                             current,
                             enabled=False,
                             required=False,
-                            reason=inner_rule.reason or "required condition not met",
+                            reason=reason,
+                            reasons=reasons,
                         )
                 else:
                     self._apply_requires(inner_rule, values, conditions, scratch)
                 targets.add(inner_rule.field)
             elif isinstance(inner_rule, EnabledWhenRule):
-                if inner_rule.field in scratch:
-                    current = scratch[inner_rule.field]
-                    scratch[inner_rule.field] = _with_status(
-                        current,
-                        enabled=inner_rule.when(values, conditions),
-                        required=current.required if inner_rule.when(values, conditions) else False,
-                    )
-                    targets.add(inner_rule.field)
+                self._apply_enabled_when(inner_rule, values, conditions, scratch)
+                targets.add(inner_rule.field)
             elif isinstance(inner_rule, FairWhenRule):
-                if inner_rule.field in scratch:
-                    current = scratch[inner_rule.field]
-                    fair = not current.satisfied or inner_rule.when(values, conditions)
-                    scratch[inner_rule.field] = _with_status(current, fair=fair)
-                    targets.add(inner_rule.field)
+                self._apply_fair_when(inner_rule, values, conditions, scratch)
+                targets.add(inner_rule.field)
             elif isinstance(inner_rule, OneOfRule):
                 self._apply_one_of(inner_rule, values, previous_values, scratch)
                 targets.update(field for fields in inner_rule.branches.values() for field in fields)
+            elif isinstance(inner_rule, EitherOfRule):
+                self._apply_either_of(inner_rule, values, conditions, previous_values, scratch)
             snapshots.append(scratch)
 
         for target in targets:
@@ -249,7 +343,80 @@ class Umpire:
             if passing:
                 result[target] = passing[0]
             elif target in snapshots[0]:
-                result[target] = snapshots[0][target]
+                failures = [snapshot[target] for snapshot in snapshots if target in snapshot]
+                result[target] = _combine_failures(failures)
+
+    def _apply_either_of(
+        self,
+        rule: EitherOfRule,
+        values: Values,
+        conditions: Conditions,
+        previous_values: Values | None,
+        result: dict[str, FieldAvailability],
+    ) -> None:
+        branch_snapshots = []
+        targets: set[str] = set()
+        for branch_rules in rule.branches.values():
+            scratch = dict(result)
+            for inner_rule in branch_rules:
+                self._apply_rule_to_scratch(
+                    inner_rule, values, conditions, previous_values, scratch
+                )
+                if isinstance(inner_rule, (RequiresRule, EnabledWhenRule, FairWhenRule, CheckRule)):
+                    targets.add(inner_rule.field)
+                elif isinstance(inner_rule, DisablesRule):
+                    targets.update(inner_rule.targets)
+                elif isinstance(inner_rule, OneOfRule):
+                    targets.update(
+                        field for fields in inner_rule.branches.values() for field in fields
+                    )
+                elif isinstance(inner_rule, EitherOfRule):
+                    targets.update(
+                        field
+                        for rules in inner_rule.branches.values()
+                        for rule_item in rules
+                        if hasattr(rule_item, "field")
+                        for field in [rule_item.field]
+                    )
+            branch_snapshots.append(scratch)
+
+        for target in targets:
+            passing = [
+                snapshot[target]
+                for snapshot in branch_snapshots
+                if target in snapshot and snapshot[target].enabled and snapshot[target].fair
+            ]
+            if passing:
+                result[target] = passing[0]
+                continue
+            failures = [snapshot[target] for snapshot in branch_snapshots if target in snapshot]
+            if failures:
+                result[target] = _combine_failures(failures)
+
+    def _apply_rule_to_scratch(
+        self,
+        rule: object,
+        values: Values,
+        conditions: Conditions,
+        previous_values: Values | None,
+        scratch: dict[str, FieldAvailability],
+    ) -> None:
+        if isinstance(rule, RequiresRule):
+            self._apply_requires(rule, values, conditions, scratch)
+        elif isinstance(rule, EnabledWhenRule):
+            self._apply_enabled_when(rule, values, conditions, scratch)
+        elif isinstance(rule, FairWhenRule):
+            self._apply_fair_when(rule, values, conditions, scratch)
+        elif isinstance(rule, DisablesRule):
+            self._apply_disables(rule, values, conditions, scratch)
+        elif isinstance(rule, OneOfRule):
+            self._apply_one_of(rule, values, previous_values, scratch)
+        elif isinstance(rule, AnyOfRule):
+            self._apply_any_of(rule, values, conditions, previous_values, scratch)
+        elif isinstance(rule, EitherOfRule):
+            self._apply_either_of(rule, values, conditions, previous_values, scratch)
+        elif isinstance(rule, CheckRule) and rule.field in scratch:
+            self._apply_check(rule, values, scratch)
 
     def _apply_one_of(
         self,
@@ -268,11 +435,15 @@ class Umpire:
                 if field not in result or field in active_fields:
                     continue
                 current = result[field]
+                reason, reasons = _append_reason(
+                    current, rule.reason or f"conflicts with {active_branch} strategy"
+                )
                 result[field] = _with_status(
                     current,
                     enabled=False,
                     required=False,
-                    reason=rule.reason or f"conflicts with {active_branch} strategy",
+                    reason=reason,
+                    reasons=reasons,
                 )
 
     def _resolve_one_of_branch(
