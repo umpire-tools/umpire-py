@@ -8,13 +8,17 @@ import pytest
 
 from umpire import FieldAvailability, UmpireSchema, umpire
 
-CONFORMANCE_DIR = Path("/Users/douglasbrown/Code/umpire/packages/json/conformance")
+from .conformance_fixtures import resolve_conformance_dir
 
 
-def _load_index() -> dict[str, Any]:
-    if not CONFORMANCE_DIR.exists():
-        pytest.skip("upstream @umpire/json conformance fixtures are not available")
-    return json.loads((CONFORMANCE_DIR / "index.json").read_text())
+@pytest.fixture(scope="session")
+def conformance_dir(pytestconfig: pytest.Config) -> Path:
+    return resolve_conformance_dir(pytestconfig)
+
+
+@pytest.fixture(scope="session")
+def conformance_index(conformance_dir: Path) -> dict[str, Any]:
+    return json.loads((conformance_dir / "index.json").read_text())
 
 
 def _availability(status: FieldAvailability) -> dict[str, Any]:
@@ -33,37 +37,43 @@ def _availability(status: FieldAvailability) -> dict[str, Any]:
     return result
 
 
-@pytest.mark.parametrize("entry", _load_index()["fixtures"])
-def test_upstream_json_fixture(entry: dict[str, Any]) -> None:
+def test_upstream_json_fixtures(
+    conformance_dir: Path,
+    conformance_index: dict[str, Any],
+) -> None:
     """Python runtime should match portable JSON fixture expectations."""
-    fixture = json.loads((CONFORMANCE_DIR / entry["path"]).read_text())
-    schema = UmpireSchema.from_json_obj(fixture["schema"])
-    u = umpire(schema.fields, schema.rules)
-
-    for case in fixture["cases"]:
-        result = u.check(
-            case.get("values", {}),
-            case.get("conditions", {}),
-            previous_values=case.get("prev"),
-        )
-
-        assert {field: _availability(status) for field, status in result.items()} == case[
-            "expectedAvailability"
-        ], f"{fixture['id']}::{case['id']}"
-
-
-@pytest.mark.parametrize("entry", _load_index()["failures"])
-def test_upstream_json_failure_fixture(entry: dict[str, Any]) -> None:
-    """Python runtime should reject invalid schemas/runtime inputs like upstream."""
-    fixture = json.loads((CONFORMANCE_DIR / entry["path"]).read_text())
-
-    for failure in fixture["failures"]:
-        if failure["phase"] == "validate":
-            with pytest.raises(Exception, match=failure["errorIncludes"]):
-                UmpireSchema.from_json_obj(failure["schema"])
-            continue
-
-        schema = UmpireSchema.from_json_obj(failure["schema"])
+    for entry in conformance_index["fixtures"]:
+        fixture = json.loads((conformance_dir / entry["path"]).read_text())
+        schema = UmpireSchema.from_json_obj(fixture["schema"])
         u = umpire(schema.fields, schema.rules)
-        with pytest.raises(Exception, match=failure["errorIncludes"]):
-            u.check(failure.get("values", {}), failure.get("conditions", {}))
+
+        for case in fixture["cases"]:
+            result = u.check(
+                case.get("values", {}),
+                case.get("conditions", {}),
+                previous_values=case.get("prev"),
+            )
+
+            assert {field: _availability(status) for field, status in result.items()} == case[
+                "expectedAvailability"
+            ], f"{fixture['id']}::{case['id']}"
+
+
+def test_upstream_json_failure_fixtures(
+    conformance_dir: Path,
+    conformance_index: dict[str, Any],
+) -> None:
+    """Python runtime should reject invalid schemas/runtime inputs like upstream."""
+    for entry in conformance_index["failures"]:
+        fixture = json.loads((conformance_dir / entry["path"]).read_text())
+
+        for failure in fixture["failures"]:
+            if failure["phase"] == "validate":
+                with pytest.raises(Exception, match=failure["errorIncludes"]):
+                    UmpireSchema.from_json_obj(failure["schema"])
+                continue
+
+            schema = UmpireSchema.from_json_obj(failure["schema"])
+            u = umpire(schema.fields, schema.rules)
+            with pytest.raises(Exception, match=failure["errorIncludes"]):
+                u.check(failure.get("values", {}), failure.get("conditions", {}))

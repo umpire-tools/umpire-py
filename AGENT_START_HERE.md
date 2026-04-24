@@ -14,8 +14,9 @@ Start from the user's next request.
 
 The package remains alpha, but the previous behavioral blockers in
 `PYTHON_PORT_PLAN.md` have been addressed for the supported surface. Upstream
-`@umpire/json` conformance fixtures now run locally when
-`~/Code/umpire/packages/json/conformance` is present.
+`@umpire/json` conformance fixtures run from `UMPIRE_JSON_CONFORMANCE_DIR` when
+set, otherwise tests fetch the pinned fixture package version from npm when that
+package includes `conformance/**`.
 
 ## Workflow
 
@@ -63,9 +64,15 @@ What exists:
   - Async providers are resolved concurrently.
   - Sync and async provider failures propagate instead of being hidden.
 - Upstream JSON conformance is now covered:
-  - `tests/schema/test_json_conformance.py` loads the fixture index from
-    `~/Code/umpire/packages/json/conformance`.
-  - The suite skips if the upstream fixture directory is unavailable.
+  - `tests/schema/test_json_conformance.py` loads the fixture index from a
+    local `UMPIRE_JSON_CONFORMANCE_DIR` or from a cached npm tarball.
+  - `.env` is gitignored and loaded by `make`; use `.env.example` as the local
+    fixture template.
+  - The remote fallback is pinned by `UMPIRE_JSON_VERSION`, not the npm
+    `latest` tag. Update the pinned version only when the published fixtures are
+    known to align with this port.
+  - The suite skips if remote fixtures are unavailable or the pinned tarball
+    does not include `conformance/**`.
   - The local fixture and failure set passes under `make check`.
 
 Known gaps:

@@ -13,7 +13,13 @@ the TypeScript package.
 condition providers, and focused contract tests are implemented, but the package
 should still be treated as alpha until real downstream integration exercises the
 API. The local test suite also runs the upstream `@umpire/json` conformance
-fixtures when `~/Code/umpire/packages/json/conformance` is available.
+fixtures. Set `UMPIRE_JSON_CONFORMANCE_DIR` for local fixture development, or
+let the tests fetch the pinned `@umpire/json` package version from npm.
+
+For convenient local runs, copy `.env.example` to `.env` and point
+`UMPIRE_JSON_CONFORMANCE_DIR` at a local conformance directory. `.env` is
+gitignored and loaded by `make`, so `make check` can use local fixtures without
+command-line environment variables.
 
 ## Installation
 

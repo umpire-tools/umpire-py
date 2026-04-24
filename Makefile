@@ -1,3 +1,8 @@
+ifneq (,$(wildcard .env))
+include .env
+export
+endif
+
 .PHONY: sync lint format typecheck test check build clean
 
 sync:
