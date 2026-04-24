@@ -34,8 +34,9 @@ def test_umpire_check_with_values() -> None:
     assert "email" in result
     assert "name" in result
 
-    # Email field should not be required because it has a value
-    assert result["email"].required is False
+    # Requiredness is structural; satisfaction tracks whether a value is present.
+    assert result["email"].required is True
+    assert result["email"].satisfied is True
 
     # Name field should not be required because it has a default
     assert result["name"].required is False

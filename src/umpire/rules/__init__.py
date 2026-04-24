@@ -1,9 +1,10 @@
 """Rule constructors for Umpire."""
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from typing import Any, Protocol
 
-from ..types import Predicate
+from ..types import CheckError, Predicate
 
 
 def requires(
@@ -33,9 +34,15 @@ def disables(
     return DisablesRule(source, list(targets), when, reason)
 
 
-def one_of(group: str, branches: Sequence[str], reason: str | None = None) -> "OneOfRule":
+def one_of(
+    group: str, branches: Mapping[str, Sequence[str]] | Sequence[str], reason: str | None = None
+) -> "OneOfRule":
     """Create a rule that enforces only one field in a group can be enabled."""
-    return OneOfRule(group, list(branches), reason)
+    if isinstance(branches, Mapping):
+        normalized = {name: list(fields) for name, fields in branches.items()}
+    else:
+        normalized = {field: [field] for field in branches}
+    return OneOfRule(group, normalized, reason)
 
 
 def any_of(rules: Sequence[object]) -> "AnyOfRule":
@@ -88,7 +95,7 @@ class OneOfRule:
     """Rule that enforces only one field in a group can be enabled."""
 
     group: str
-    branches: list[str]
+    branches: dict[str, list[str]]
     reason: str | None = None
 
 
@@ -116,8 +123,8 @@ class CheckRule:
     op: "CheckOp"
 
 
-# Placeholder for CheckOp - will be properly defined in checks.py
-class CheckOp:
-    """Placeholder for check operations."""
+class CheckOp(Protocol):
+    """Protocol for check operations."""
 
-    pass
+    def __call__(self, value: Any, field_name: str) -> CheckError | None:
+        """Evaluate a field value and return a check error when invalid."""

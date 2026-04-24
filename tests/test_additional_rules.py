@@ -52,7 +52,11 @@ def test_one_of_rule_evaluation() -> None:
     rules = [
         one_of(
             group="payment_method",
-            branches=["payment_credit_card", "payment_paypal", "payment_bank_transfer"],
+            branches={
+                "card": ["payment_credit_card"],
+                "paypal": ["payment_paypal"],
+                "bank": ["payment_bank_transfer"],
+            },
             reason="Only one payment method can be selected",
         )
     ]
@@ -68,34 +72,59 @@ def test_one_of_rule_evaluation() -> None:
         }
     )
 
-    # First field should remain enabled
     assert result["payment_credit_card"].enabled is True
-    # Second field should be disabled by one_of rule
     assert result["payment_paypal"].enabled is False
-    # Third field should remain enabled (since it has no value)
-    assert result["payment_bank_transfer"].enabled is True
+    assert result["payment_bank_transfer"].enabled is False
 
 
-def test_any_of_rule_evaluation() -> None:
-    """Test that any_of rules work (though they don't directly affect field availability)."""
+def test_one_of_uses_previous_state_to_resolve_new_active_branch() -> None:
+    """When a new branch becomes satisfied, previous state should break ties."""
     fields = {
-        "email": FieldDef(required=True),
-        "phone": FieldDef(required=False),
-        "address": FieldDef(required=False),
+        "payment_credit_card": FieldDef(),
+        "payment_paypal": FieldDef(),
     }
 
-    # Create some individual rules
-    phone_required = requires("phone", when=lambda values, conditions: True)
-    address_required = requires("address", when=lambda values, conditions: True)
-
-    rules = [any_of([phone_required, address_required])]
+    rules = [
+        one_of(
+            group="payment_method",
+            branches={
+                "card": ["payment_credit_card"],
+                "paypal": ["payment_paypal"],
+            },
+        )
+    ]
 
     u = umpire(fields, rules)
 
-    # Test - any_of doesn't directly affect field availability in our simple implementation
-    result = u.check({"email": "test@example.com", "phone": "123-456-7890"})
+    before_values = {"payment_credit_card": "1234"}
+    after_values = {"payment_credit_card": "1234", "payment_paypal": "paypal@example.com"}
+    result = u.check(after_values, previous_values=before_values)
 
-    # Fields should be available as normal
-    assert "email" in result
-    assert "phone" in result
-    assert "address" in result
+    assert result["payment_credit_card"].enabled is False
+    assert result["payment_paypal"].enabled is True
+
+
+def test_any_of_rule_evaluation() -> None:
+    """any_of implements OR semantics across compatible inner rules."""
+    fields = {
+        "email": FieldDef(required=True),
+        "phone": FieldDef(required=False),
+    }
+
+    phone_allowed_by_email = requires("phone", dependency="email")
+    phone_allowed_by_admin = requires(
+        "phone", when=lambda values, conditions: conditions["is_admin"]
+    )
+
+    rules = [any_of([phone_allowed_by_email, phone_allowed_by_admin])]
+
+    u = umpire(fields, rules)
+
+    result = u.check({}, {"is_admin": False})
+    assert result["phone"].enabled is False
+
+    result = u.check({}, {"is_admin": True})
+    assert result["phone"].enabled is True
+
+    result = u.check({"email": "test@example.com"}, {"is_admin": False})
+    assert result["phone"].enabled is True

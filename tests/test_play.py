@@ -50,7 +50,7 @@ def test_play_field_becomes_required_with_value() -> None:
 
 
 def test_play_field_becomes_required_without_value() -> None:
-    """Test play method when field becomes required and has no value."""
+    """Required transitions alone should not fabricate reset fouls."""
     fields = {
         "email": FieldDef(required=True),
     }
@@ -66,35 +66,41 @@ def test_play_field_becomes_required_without_value() -> None:
     values = {}  # No email value
 
     fouls = u.play(before, after, values)
-    assert len(fouls) == 1
-    assert isinstance(fouls[0], Foul)
-    assert fouls[0].field == "email"
-    assert "became required" in fouls[0].reason
+    assert fouls == []
 
 
-def test_play_multiple_fields() -> None:
-    """Test play method with multiple fields."""
+def test_play_recommends_reset_for_newly_disabled_satisfied_value() -> None:
+    """play recommends a reset when a field became disabled and still has a value."""
     fields = {
         "email": FieldDef(required=True),
-        "name": FieldDef(required=False),
-        "age": FieldDef(required=True),
+        "discount": FieldDef(default_value=None),
     }
     u = umpire(fields)
 
-    # Mix of changes
     before = {
-        "email": FieldAvailability(required=False),
-        "name": FieldAvailability(required=False),
-        "age": FieldAvailability(required=False),
+        "email": FieldAvailability(required=True),
+        "discount": FieldAvailability(enabled=True),
     }
     after = {
         "email": FieldAvailability(required=True),
-        "name": FieldAvailability(required=False),
-        "age": FieldAvailability(required=True),
+        "discount": FieldAvailability(enabled=False, reason="overridden by coupon"),
     }
-    values = {"email": "test@example.com"}  # email has value, age doesn't
+    values = {"email": "test@example.com", "discount": "manual-override"}
 
     fouls = u.play(before, after, values)
-    assert len(fouls) == 1  # Only age should generate a foul
-    assert fouls[0].field == "age"
-    assert "became required" in fouls[0].reason
+    assert fouls == [Foul("discount", "overridden by coupon", None)]
+
+
+def test_play_recommends_reset_for_newly_foul_satisfied_value() -> None:
+    """play recommends a reset when a field became foul and still has a value."""
+    fields = {
+        "plan": FieldDef(default_value="basic"),
+    }
+    u = umpire(fields)
+
+    before = {"plan": FieldAvailability(fair=True)}
+    after = {"plan": FieldAvailability(fair=False, reason="plan unavailable")}
+
+    fouls = u.play(before, after, {"plan": "enterprise"})
+
+    assert fouls == [Foul("plan", "plan unavailable", "basic")]

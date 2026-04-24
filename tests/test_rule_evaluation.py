@@ -105,13 +105,69 @@ def test_check_rule_evaluation() -> None:
 
     u = umpire(fields, rules)
 
-    # Test with valid values
     result = u.check({"email": "test@example.com", "password": "password123"})
-    # Note: Check rules don't currently affect the FieldAvailability object directly
-    # They would affect the check_errors field, but that's not implemented yet
+    assert result["email"].check_errors == ()
+    assert result["password"].check_errors == ()
 
-    assert "email" in result
-    assert "password" in result
+    result = u.check({"email": "not-an-email", "password": "short"})
+    assert len(result["email"].check_errors) == 1
+    assert result["email"].check_errors[0].field == "email"
+    assert "email" in result["email"].check_errors[0].reason.lower()
+    assert len(result["password"].check_errors) == 1
+    assert result["password"].check_errors[0].field == "password"
+
+
+def test_disabled_required_field_reports_not_required() -> None:
+    """Disabled fields should not also be reported as required."""
+    fields = {
+        "has_coupon": FieldDef(),
+        "coupon_code": FieldDef(required=True, is_empty=IsEmptyStrategy.STRING),
+    }
+
+    rules = [enabled_when("coupon_code", lambda values, conditions: False)]
+
+    u = umpire(fields, rules)
+
+    result = u.check({})
+
+    assert result["coupon_code"].enabled is False
+    assert result["coupon_code"].required is False
+
+
+def test_requires_dependency_uses_dependency_satisfaction_and_availability() -> None:
+    """Dependency-backed requires mirrors Umpire's dependency semantics."""
+    fields = {
+        "password": FieldDef(is_empty=IsEmptyStrategy.STRING),
+        "confirm_password": FieldDef(is_empty=IsEmptyStrategy.STRING),
+    }
+
+    rules = [requires("confirm_password", dependency="password")]
+
+    u = umpire(fields, rules)
+
+    assert u.check({})["confirm_password"].enabled is False
+    assert u.check({"password": ""})["confirm_password"].enabled is False
+    assert u.check({"password": "hunter2"})["confirm_password"].enabled is True
+
+
+def test_requires_dependency_respects_dependency_availability() -> None:
+    """A dependency must be enabled and fair before its dependent can be enabled."""
+    fields = {
+        "password": FieldDef(is_empty=IsEmptyStrategy.STRING),
+        "confirm_password": FieldDef(is_empty=IsEmptyStrategy.STRING),
+    }
+
+    rules = [
+        enabled_when("password", lambda values, conditions: False),
+        requires("confirm_password", dependency="password"),
+    ]
+
+    u = umpire(fields, rules)
+
+    result = u.check({"password": "hunter2"})
+
+    assert result["password"].enabled is False
+    assert result["confirm_password"].enabled is False
 
 
 def test_email_check_operation() -> None:

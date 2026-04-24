@@ -32,6 +32,8 @@ class FieldAvailability:
     enabled: bool = True
     required: bool = False
     fair: bool = True
+    satisfied: bool = False
+    reason: str | None = None
     check_errors: tuple["CheckError", ...] = ()
 
 

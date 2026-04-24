@@ -9,8 +9,8 @@ Read this first:
 
 Work from **Recovery execution order** in `PYTHON_PORT_PLAN.md`.
 
-Start with **R1: Replace placeholder tests with contract/parity tests** unless
-the user asks for a narrower task.
+Start with **R5: Schema loading and validation** unless the user asks for a
+narrower task.
 
 The current package is a scaffold, not a complete port. Do not continue
 packaging/release polish until the behavioral blockers in `PYTHON_PORT_PLAN.md`
@@ -43,15 +43,18 @@ What exists:
 - Public constructors and check ops exist.
 - Basic async provider resolution exists.
 - `make check` can pass with a writable uv cache.
+- R1-R4 recovery work is complete for the current Python surface:
+  - Contract tests now cover `check` errors, dependency-backed `requires`,
+    disabled-required behavior, `any_of`, branch-based `one_of`, and `play`.
+  - `FieldAvailability` separates structural state from `satisfied` and
+    carries transition `reason` metadata.
+  - `play()` now recommends resets only for newly disabled or newly foul
+    satisfied values.
 
 Known gaps:
 
-- `check(...)` rules are ignored by `Umpire.check()`.
-- `any_of(...)` is a no-op.
-- `requires(..., dependency=...)` does not enforce dependency semantics.
-- `one_of(...)` does not model named branches or previous-state resolution.
-- `play(...)` does not implement Umpire transition reset semantics.
 - Schema loading drops rules and conditions.
-- Tests currently bless placeholders instead of proving parity.
+- Expression compilation is still narrow and too permissive in places.
+- Async provider handling still needs the R6 hardening pass.
 
 Use `PYTHON_PORT_PLAN.md` as the source of truth.

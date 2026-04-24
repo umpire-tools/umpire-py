@@ -76,7 +76,11 @@ def test_one_of_rule() -> None:
     rule = one_of("group1", ["field1", "field2", "field3"], reason="Only one allowed")
     assert isinstance(rule, OneOfRule)
     assert rule.group == "group1"
-    assert rule.branches == ["field1", "field2", "field3"]
+    assert rule.branches == {
+        "field1": ["field1"],
+        "field2": ["field2"],
+        "field3": ["field3"],
+    }
     assert rule.reason == "Only one allowed"
 
 
