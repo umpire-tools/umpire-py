@@ -3,6 +3,7 @@
 import asyncio
 import inspect
 from collections.abc import Mapping, Sequence
+import math
 from typing import Any
 
 from .rules import (
@@ -15,24 +16,24 @@ from .rules import (
     OneOfRule,
     RequiresRule,
 )
-from .types import Conditions, FieldAvailability, FieldDef, Foul, Rule, Values
+from .types import Conditions, FieldAvailability, FieldDef, Foul, IsEmptyStrategy, Rule, Values
 
 _UNCHANGED = object()
 
 
 def _is_satisfied(value: Any, field_def: FieldDef) -> bool:
     """Return whether a value satisfies a field's emptiness strategy."""
-    if field_def.is_empty.value == "string":
+    if field_def.is_empty == IsEmptyStrategy.STRING:
         return isinstance(value, str) and value != ""
-    if field_def.is_empty.value == "number":
-        return isinstance(value, (int, float)) and not isinstance(value, bool)
-    if field_def.is_empty.value == "boolean":
+    if field_def.is_empty == IsEmptyStrategy.NUMBER:
+        return isinstance(value, (int, float)) and not isinstance(value, bool) and not math.isnan(value)
+    if field_def.is_empty == IsEmptyStrategy.BOOLEAN:
         return isinstance(value, bool)
-    if field_def.is_empty.value == "array":
+    if field_def.is_empty == IsEmptyStrategy.ARRAY:
         return (
             isinstance(value, Sequence) and not isinstance(value, (str, bytes)) and len(value) > 0
         )
-    if field_def.is_empty.value == "object":
+    if field_def.is_empty == IsEmptyStrategy.OBJECT:
         return isinstance(value, Mapping) and len(value) > 0
     return value is not None
 
@@ -78,6 +79,26 @@ def _combine_failures(failures: Sequence[FieldAvailability]) -> FieldAvailabilit
         reason=reasons[0] if reasons else first.reason,
         reasons=reasons,
     )
+
+
+def _collect_rule_targets(rule: object) -> set[str]:
+    """Recursively collect leaf target fields from a rule tree."""
+    targets: set[str] = set()
+    if isinstance(rule, (RequiresRule, EnabledWhenRule, FairWhenRule, CheckRule)):
+        targets.add(rule.field)
+    elif isinstance(rule, DisablesRule):
+        targets.update(rule.targets)
+    elif isinstance(rule, OneOfRule):
+        for fields in rule.branches.values():
+            targets.update(fields)
+    elif isinstance(rule, EitherOfRule):
+        for branch_rules in rule.branches.values():
+            for inner in branch_rules:
+                targets.update(_collect_rule_targets(inner))
+    elif isinstance(rule, AnyOfRule):
+        for inner in rule.rules:
+            targets.update(_collect_rule_targets(inner))
+    return targets
 
 
 def umpire(fields: Mapping[str, FieldDef], rules: Sequence[Rule] = ()) -> "Umpire":
@@ -156,12 +177,38 @@ class Umpire:
             for rule in self._rules
             if isinstance(rule, RequiresRule) and rule.dependency is not None
         ]
-        for _ in range(len(dependency_rules)):
+        if not dependency_rules:
+            return
+
+        prev_changed: set[tuple[str, str]] = set()
+        max_iterations = len(dependency_rules) * 2
+        iteration = 0
+
+        while True:
+            iteration += 1
+            if iteration > max_iterations:
+                raise ValueError(
+                    "Dependency chain exceeded maximum iterations "
+                    f"({len(dependency_rules)} rules, {iteration} iterations)"
+                )
+
             before = dict(result)
             for rule in dependency_rules:
                 self._apply_requires(rule, values, conditions, result)
             if before == result:
                 return
+
+            changed_fields = {f for f, a in result.items() if before.get(f) != a}
+            current_changed: set[tuple[str, str]] = set()
+            for rule in dependency_rules:
+                chain_key = (rule.field, rule.dependency)
+                if changed_fields & {rule.field, rule.dependency}:
+                    if chain_key in prev_changed:
+                        raise ValueError(
+                            f"Circular dependency detected: {rule.field} ↔ {rule.dependency}"
+                        )
+                    current_changed.add(chain_key)
+            prev_changed = current_changed
 
     def _apply_requires(
         self,
@@ -332,6 +379,13 @@ class Umpire:
                 targets.update(field for fields in inner_rule.branches.values() for field in fields)
             elif isinstance(inner_rule, EitherOfRule):
                 self._apply_either_of(inner_rule, values, conditions, previous_values, scratch)
+            elif isinstance(inner_rule, DisablesRule):
+                self._apply_disables(inner_rule, values, conditions, scratch)
+                targets.update(inner_rule.targets)
+            elif isinstance(inner_rule, CheckRule):
+                if inner_rule.field in scratch:
+                    self._apply_check(inner_rule, values, scratch)
+                targets.add(inner_rule.field)
             snapshots.append(scratch)
 
         for target in targets:
@@ -354,44 +408,49 @@ class Umpire:
         previous_values: Values | None,
         result: dict[str, FieldAvailability],
     ) -> None:
-        branch_snapshots = []
-        targets: set[str] = set()
+        branch_snapshots: list[dict[str, FieldAvailability]] = []
+        branch_targets: list[set[str]] = []
+
         for branch_rules in rule.branches.values():
             scratch = dict(result)
+            targets: set[str] = set()
             for inner_rule in branch_rules:
                 self._apply_rule_to_scratch(
                     inner_rule, values, conditions, previous_values, scratch
                 )
-                if isinstance(inner_rule, (RequiresRule, EnabledWhenRule, FairWhenRule, CheckRule)):
-                    targets.add(inner_rule.field)
-                elif isinstance(inner_rule, DisablesRule):
-                    targets.update(inner_rule.targets)
-                elif isinstance(inner_rule, OneOfRule):
-                    targets.update(
-                        field for fields in inner_rule.branches.values() for field in fields
-                    )
-                elif isinstance(inner_rule, EitherOfRule):
-                    targets.update(
-                        field
-                        for rules in inner_rule.branches.values()
-                        for rule_item in rules
-                        if hasattr(rule_item, "field")
-                        for field in [rule_item.field]
-                    )
+                targets.update(_collect_rule_targets(inner_rule))
             branch_snapshots.append(scratch)
+            branch_targets.append(targets)
 
-        for target in targets:
-            passing = [
-                snapshot[target]
-                for snapshot in branch_snapshots
-                if target in snapshot and snapshot[target].enabled and snapshot[target].fair
-            ]
-            if passing:
-                result[target] = passing[0]
-                continue
-            failures = [snapshot[target] for snapshot in branch_snapshots if target in snapshot]
-            if failures:
-                result[target] = _combine_failures(failures)
+        # Determine which branches pass holistically
+        passing_indices: list[int] = []
+        for i, (snapshot, targets) in enumerate(zip(branch_snapshots, branch_targets)):
+            if not targets:
+                # Branch with zero leaf targets passes trivially
+                passing_indices.append(i)
+            elif all(
+                field in snapshot
+                and snapshot[field].enabled
+                and snapshot[field].fair
+                for field in targets
+            ):
+                passing_indices.append(i)
+
+        if passing_indices:
+            # Apply first passing branch's entire snapshot
+            first = branch_snapshots[passing_indices[0]]
+            for field, availability in first.items():
+                if availability != result.get(field):
+                    result[field] = availability
+        else:
+            # No branch passes — combine failures per-target
+            all_targets: set[str] = set()
+            for targets in branch_targets:
+                all_targets.update(targets)
+            for target in all_targets:
+                failures = [s[target] for s in branch_snapshots if target in s]
+                if failures:
+                    result[target] = _combine_failures(failures)
 
     def _apply_rule_to_scratch(
         self,
@@ -523,7 +582,8 @@ class Umpire:
         return fouls
 
     async def check_async(
-        self, values: Values, conditions: Mapping[str, Any] | None = None
+        self, values: Values, conditions: Mapping[str, Any] | None = None,
+        previous_values: Values | None = None,
     ) -> Mapping[str, FieldAvailability]:
         """
         Check field availability based on current values and async conditions.
@@ -557,4 +617,4 @@ class Umpire:
             async_results = await asyncio.gather(*async_values)
             resolved_conditions.update(dict(zip(async_keys, async_results, strict=True)))
 
-        return self.check(values, resolved_conditions)
+        return self.check(values, resolved_conditions, previous_values=previous_values)

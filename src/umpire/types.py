@@ -28,7 +28,13 @@ class FieldDef:
 
 @dataclass(frozen=True)
 class FieldAvailability:
-    """Availability information for a field."""
+    """Availability information for a field.
+
+    Fields are populated by programmatic rule evaluation (engine.py).
+    The `valid` and `error` fields are schema-validator-only and are not
+    populated by programmatic rule evaluation — they exist for JSON schema
+    conformance.
+    """
 
     enabled: bool = True
     required: bool = False
@@ -37,7 +43,9 @@ class FieldAvailability:
     reason: str | None = None
     reasons: tuple[str, ...] = ()
     check_errors: tuple["CheckError", ...] = ()
+    # schema-validator only; not populated by programmatic rule evaluation
     valid: bool | None = None
+    # schema-validator only; not populated by programmatic rule evaluation
     error: str | None = None
 
 

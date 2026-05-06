@@ -46,8 +46,28 @@ def one_of(
 
 
 def any_of(rules: Sequence[object]) -> "AnyOfRule":
-    """Create a rule that passes if any of the provided rules pass."""
-    return AnyOfRule(list(rules))
+    """Create a rule that passes if any of the provided rules pass.
+
+    All sub-rules must affect the same constraint type: all must affect
+    'enabled' (RequiresRule, EnabledWhenRule, DisablesRule) or all must
+    affect 'fair' (FairWhenRule, CheckRule).
+    """
+    rule_list = list(rules)
+    if not rule_list:
+        return AnyOfRule([])
+
+    enabled_types = (RequiresRule, EnabledWhenRule, DisablesRule)
+    fair_types = (FairWhenRule, CheckRule)
+
+    has_enabled = any(isinstance(r, enabled_types) for r in rule_list)
+    has_fair = any(isinstance(r, fair_types) for r in rule_list)
+
+    if has_enabled and has_fair:
+        raise ValueError(
+            "any_of rules must all affect 'enabled' or all affect 'fair', not mixed"
+        )
+
+    return AnyOfRule(rule_list)
 
 
 def either_of(group: str, branches: Mapping[str, Sequence[object]]) -> "EitherOfRule":
@@ -134,7 +154,7 @@ class CheckRule:
 
     field: str
     op: "CheckOp"
-    affects_fair: bool = False
+    affects_fair: bool = True
     validation: bool = False
 
 

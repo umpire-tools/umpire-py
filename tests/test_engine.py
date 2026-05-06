@@ -1,3 +1,5 @@
+import math
+
 from umpire import (
     FieldAvailability,
     FieldDef,
@@ -77,3 +79,13 @@ def test_umpire_check_field_availability_defaults() -> None:
 
     # Field with default should not be required
     assert result["default_field"].required is False
+
+
+def test_nan_not_satisfied_for_number_strategy() -> None:
+    """float('nan') should not be considered satisfied for NUMBER isEmpty strategy."""
+    from umpire.types import IsEmptyStrategy
+
+    fields = {"age": FieldDef(is_empty=IsEmptyStrategy.NUMBER)}
+    u = umpire(fields)
+    result = u.check({"age": float("nan")})
+    assert result["age"].satisfied is False

@@ -369,3 +369,24 @@ def test_range_value_check_operation() -> None:
     assert result is not None
     assert result.field == "number_field"
     assert "number" in result.reason.lower()
+
+
+def test_check_rule_affects_fair_by_default() -> None:
+    """CheckRule should affect fair by default — check failures make values unfair."""
+    fields = {
+        "email": FieldDef(required=True, is_empty=IsEmptyStrategy.STRING),
+    }
+    rules = [
+        check("email", check_ops.email()),
+    ]
+    u = umpire(fields, rules)
+
+    # Valid email: fair should be True
+    result = u.check({"email": "test@example.com"})
+    assert result["email"].fair is True
+
+    # Invalid email: fair should now be False (because affects_fair=True by default)
+    result = u.check({"email": "not-an-email"})
+    assert result["email"].fair is False
+    assert len(result["email"].check_errors) == 1
+    assert "email" in result["email"].check_errors[0].reason.lower()

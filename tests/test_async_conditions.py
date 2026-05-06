@@ -144,3 +144,24 @@ async def test_check_async_propagates_async_provider_failure() -> None:
 
     with pytest.raises(RuntimeError, match="condition exploded"):
         await u.check_async({}, {"is_admin": failing_provider})
+
+
+@pytest.mark.asyncio
+async def test_check_async_with_previous_values_for_one_of() -> None:
+    """check_async should forward previous_values for one_of branch resolution."""
+    from umpire import one_of
+    from umpire.types import IsEmptyStrategy
+
+    fields = {
+        "email": FieldDef(is_empty=IsEmptyStrategy.STRING),
+        "phone": FieldDef(is_empty=IsEmptyStrategy.STRING),
+    }
+    rules = [one_of("contact", {"email": ["email"], "phone": ["phone"]})]
+    u = umpire(fields, rules)
+
+    result = await u.check_async(
+        {"email": "a@b.com", "phone": "555-1234"},
+        previous_values={"email": "", "phone": "555-1234"},
+    )
+    assert result["email"].enabled is True
+    assert result["phone"].enabled is False
