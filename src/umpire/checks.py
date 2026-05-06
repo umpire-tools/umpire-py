@@ -1,18 +1,19 @@
 """Check operations for Umpire."""
 
 import re
-from dataclasses import dataclass
+from dataclasses import KW_ONLY, dataclass
 from re import Pattern
 from typing import Any
 
 from .types import CheckError
 
 
+@dataclass
 class CheckOp:
     """Base class for check operations."""
 
-    def __init__(self, reason: str | None = None):
-        self.reason = reason
+    _: KW_ONLY
+    reason: str | None = None
 
     def __call__(self, value: Any, field_name: str) -> CheckError | None:
         """Execute the check operation on a value."""
@@ -195,16 +196,12 @@ class IntegerCheck(CheckOp):
 
 def email(reason: str | None = None) -> EmailCheck:
     """Create an email check operation."""
-    check = EmailCheck()
-    check.reason = reason
-    return check
+    return EmailCheck(reason=reason)
 
 
 def url(reason: str | None = None) -> UrlCheck:
     """Create a URL check operation."""
-    check = UrlCheck()
-    check.reason = reason
-    return check
+    return UrlCheck(reason=reason)
 
 
 def matches(pattern: str | Pattern[str], reason: str | None = None) -> MatchesCheck:
@@ -214,53 +211,39 @@ def matches(pattern: str | Pattern[str], reason: str | None = None) -> MatchesCh
             re.compile(pattern)
         except re.error as e:
             raise ValueError(f"Invalid regex pattern: {e}") from e
-    check = MatchesCheck(pattern=pattern)
-    check.reason = reason
-    return check
+    return MatchesCheck(pattern=pattern, reason=reason)
 
 
 def min_length(minimum: int, reason: str | None = None) -> MinLengthCheck:
     """Create a minimum length check operation."""
-    check = MinLengthCheck(minimum=minimum)
-    check.reason = reason
-    return check
+    return MinLengthCheck(minimum=minimum, reason=reason)
 
 
 def max_length(maximum: int, reason: str | None = None) -> MaxLengthCheck:
     """Create a maximum length check operation."""
-    check = MaxLengthCheck(maximum=maximum)
-    check.reason = reason
-    return check
+    return MaxLengthCheck(maximum=maximum, reason=reason)
 
 
 def min_value(minimum: int | float, reason: str | None = None) -> MinValueCheck:
     """Create a minimum value check operation."""
-    check = MinValueCheck(minimum=minimum)
-    check.reason = reason
-    return check
+    return MinValueCheck(minimum=minimum, reason=reason)
 
 
 def max_value(maximum: int | float, reason: str | None = None) -> MaxValueCheck:
     """Create a maximum value check operation."""
-    check = MaxValueCheck(maximum=maximum)
-    check.reason = reason
-    return check
+    return MaxValueCheck(maximum=maximum, reason=reason)
 
 
 def range_value(
     minimum: int | float, maximum: int | float, reason: str | None = None
 ) -> RangeValueCheck:
     """Create a range value check operation."""
-    check = RangeValueCheck(minimum=minimum, maximum=maximum)
-    check.reason = reason
-    return check
+    return RangeValueCheck(minimum=minimum, maximum=maximum, reason=reason)
 
 
 def integer(reason: str | None = None) -> IntegerCheck:
     """Create an integer check operation."""
-    check = IntegerCheck()
-    check.reason = reason
-    return check
+    return IntegerCheck(reason=reason)
 
 
 # Create a namespace object for check operations

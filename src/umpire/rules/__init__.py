@@ -80,7 +80,7 @@ def fair_when(field: str, when: Predicate, reason: str | None = None) -> "FairWh
     return FairWhenRule(field, when, reason)
 
 
-def check(field: str, op: "CheckOp") -> "CheckRule":
+def check(field: str, op: "CheckOpProtocol") -> "CheckRule":
     """Create a rule that applies a check operation to a field."""
     return CheckRule(field, op)
 
@@ -153,12 +153,12 @@ class CheckRule:
     """Rule that applies a check operation to a field."""
 
     field: str
-    op: "CheckOp"
+    op: "CheckOpProtocol"
     affects_fair: bool = True
     validation: bool = False
 
 
-class CheckOp(Protocol):
+class CheckOpProtocol(Protocol):
     """Protocol for check operations."""
 
     def __call__(self, value: Any, field_name: str) -> CheckError | None:

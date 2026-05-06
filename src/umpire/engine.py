@@ -16,7 +16,7 @@ from .rules import (
     OneOfRule,
     RequiresRule,
 )
-from .types import Conditions, FieldAvailability, FieldDef, Foul, IsEmptyStrategy, Rule, Values
+from .types import Conditions, FieldAvailability, FieldDef, Foul, IsEmptyStrategy, Values
 
 _UNCHANGED = object()
 
@@ -101,7 +101,7 @@ def _collect_rule_targets(rule: object) -> set[str]:
     return targets
 
 
-def umpire(fields: Mapping[str, FieldDef], rules: Sequence[Rule] = ()) -> "Umpire":
+def umpire(fields: Mapping[str, FieldDef], rules: Sequence[object] = ()) -> "Umpire":
     """Create a new Umpire instance."""
     return Umpire(fields, rules)
 
@@ -109,7 +109,7 @@ def umpire(fields: Mapping[str, FieldDef], rules: Sequence[Rule] = ()) -> "Umpir
 class Umpire:
     """Main Umpire engine for evaluating field availability and transitions."""
 
-    def __init__(self, fields: Mapping[str, FieldDef], rules: Sequence[Rule] = ()):
+    def __init__(self, fields: Mapping[str, FieldDef], rules: Sequence[object] = ()):
         """Initialize Umpire with fields and rules."""
         self._fields = dict(fields)
         self._rules = list(rules)

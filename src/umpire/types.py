@@ -3,7 +3,7 @@
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Protocol
+from typing import Any
 
 
 class IsEmptyStrategy(Enum):
@@ -72,7 +72,3 @@ Conditions = Mapping[str, Any]
 Predicate = Callable[[Values, Conditions], bool]
 
 
-class Rule(Protocol):
-    """Protocol for rule implementations."""
-
-    pass

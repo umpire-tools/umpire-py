@@ -16,7 +16,7 @@ from ..rules import (
     one_of,
     requires,
 )
-from ..types import FieldDef, IsEmptyStrategy, Rule
+from ..types import FieldDef, IsEmptyStrategy
 from .expr import ExpressionCompiler
 
 
@@ -30,7 +30,7 @@ class UmpireSchema:
 
     version: int
     fields: dict[str, FieldDef]
-    rules: Sequence[Rule] = field(default_factory=list)
+    rules: Sequence[object] = field(default_factory=list)
     conditions: dict[str, Any] = field(default_factory=dict)
     excluded: tuple[dict[str, Any], ...] = ()
     warnings: tuple[str, ...] = ()
@@ -83,7 +83,7 @@ class UmpireSchema:
 
     @classmethod
     def build(
-        cls, conditions: dict[str, Any] | None = None, rules: Sequence[Rule] = ()
+        cls, conditions: dict[str, Any] | None = None, rules: Sequence[object] = ()
     ) -> "UmpireSchema":
         """Build a UmpireSchema with the given conditions and rules."""
         return cls(version=1, fields={}, rules=list(rules), conditions=conditions or {})
@@ -123,8 +123,8 @@ def _parse_rules(
     *,
     field_names: set[str],
     compiler: ExpressionCompiler,
-) -> list[Rule]:
-    rules: list[Rule] = []
+) -> list[object]:
+    rules: list[object] = []
     for rule_obj in rules_list:
         if not isinstance(rule_obj, Mapping):
             raise UmpireSchemaError("Rule must be a dictionary")
@@ -137,7 +137,7 @@ def _parse_rule(
     *,
     field_names: set[str],
     compiler: ExpressionCompiler,
-) -> list[Rule]:
+) -> list[object]:
     rule_type = rule_obj.get("type")
     if not isinstance(rule_type, str):
         raise UmpireSchemaError("Rule must include a string type")
@@ -156,7 +156,7 @@ def _parse_rule(
                 dependencies = _sequence(rule_obj, "dependencies")
                 if not dependencies:
                     raise UmpireSchemaError("requires dependencies must not be empty")
-                parsed: list[Rule] = []
+                parsed: list[object] = []
                 for dependency in dependencies:
                     if isinstance(dependency, str):
                         _assert_known_field(dependency, field_names)
@@ -250,8 +250,8 @@ def _parse_rule(
     raise UmpireSchemaError(f"unknown rule type: {rule_type}")
 
 
-def _parse_validators(validators: Mapping[str, Any], field_names: set[str]) -> list[Rule]:
-    rules: list[Rule] = []
+def _parse_validators(validators: Mapping[str, Any], field_names: set[str]) -> list[object]:
+    rules: list[object] = []
     for field_name, spec in validators.items():
         field = _known_field(field_name, field_names)
         if not isinstance(spec, Mapping):
