@@ -2,8 +2,8 @@
 
 import asyncio
 import inspect
-from collections.abc import Mapping, Sequence
 import math
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 from .rules import (
@@ -16,7 +16,21 @@ from .rules import (
     OneOfRule,
     RequiresRule,
 )
-from .types import Conditions, FieldAvailability, FieldDef, Foul, IsEmptyStrategy, Values
+from .types import (
+    ChallengeReason,
+    ChallengeTrace,
+    Conditions,
+    FieldAvailability,
+    FieldDef,
+    Foul,
+    GraphEdge,
+    IsEmptyStrategy,
+    RuleEntry,
+    Scorecard,
+    ScorecardField,
+    UmpireGraph,
+    Values,
+)
 
 _UNCHANGED = object()
 
@@ -26,7 +40,11 @@ def _is_satisfied(value: Any, field_def: FieldDef) -> bool:
     if field_def.is_empty == IsEmptyStrategy.STRING:
         return isinstance(value, str) and value != ""
     if field_def.is_empty == IsEmptyStrategy.NUMBER:
-        return isinstance(value, (int, float)) and not isinstance(value, bool) and not math.isnan(value)
+        return (
+            isinstance(value, (int, float))
+            and not isinstance(value, bool)
+            and not math.isnan(value)
+        )
     if field_def.is_empty == IsEmptyStrategy.BOOLEAN:
         return isinstance(value, bool)
     if field_def.is_empty == IsEmptyStrategy.ARRAY:
@@ -81,7 +99,7 @@ def _combine_failures(failures: Sequence[FieldAvailability]) -> FieldAvailabilit
     )
 
 
-def _collect_rule_targets(rule: object) -> set[str]:
+def _collect_rule_targets(rule: object) -> tuple[str, ...]:
     """Recursively collect leaf target fields from a rule tree."""
     targets: set[str] = set()
     if isinstance(rule, (RequiresRule, EnabledWhenRule, FairWhenRule, CheckRule)):
@@ -98,7 +116,72 @@ def _collect_rule_targets(rule: object) -> set[str]:
     elif isinstance(rule, AnyOfRule):
         for inner in rule.rules:
             targets.update(_collect_rule_targets(inner))
-    return targets
+    return tuple(sorted(targets))
+
+
+def _rule_kind(rule: object) -> str:
+    """Return a snake_case kind string for a rule."""
+    if isinstance(rule, RequiresRule):
+        return "requires"
+    if isinstance(rule, EnabledWhenRule):
+        return "enabled_when"
+    if isinstance(rule, FairWhenRule):
+        return "fair_when"
+    if isinstance(rule, DisablesRule):
+        return "disables"
+    if isinstance(rule, OneOfRule):
+        return "one_of"
+    if isinstance(rule, AnyOfRule):
+        return "any_of"
+    if isinstance(rule, EitherOfRule):
+        return "either_of"
+    if isinstance(rule, CheckRule):
+        return "check"
+    return "unknown"
+
+
+def _rule_targets(rule: object) -> tuple[str, ...]:
+    """Return leaf target fields for a rule."""
+    return _collect_rule_targets(rule)
+
+
+def _rule_sources(rule: object) -> tuple[str, ...]:
+    """Return source fields for a rule."""
+    if isinstance(rule, RequiresRule):
+        if rule.dependency is not None:
+            return (rule.dependency,)
+        return ()
+    if isinstance(rule, DisablesRule):
+        if rule.source != "":
+            return (rule.source,)
+        return ()
+    return ()
+
+
+def _rule_id(rule: object, seen: dict[str, int]) -> str:
+    """Return a stable, deterministic ID for a rule."""
+    kind = _rule_kind(rule)
+    if isinstance(rule, RequiresRule):
+        if rule.dependency is not None:
+            base = f"{kind}:{rule.field}:{rule.dependency}"
+        else:
+            base = f"{kind}:{rule.field}"
+    elif isinstance(rule, (OneOfRule, EitherOfRule)):
+        base = f"{kind}:{rule.group}"
+    elif isinstance(rule, (EnabledWhenRule, FairWhenRule, CheckRule)):
+        base = f"{kind}:{rule.field}"
+    elif isinstance(rule, DisablesRule):
+        base = f"{kind}:{rule.source}" if rule.source else f"{kind}:_any_source"
+    elif isinstance(rule, AnyOfRule):
+        base = f"{kind}"
+    else:
+        base = kind
+
+    count = seen.get(base, 0) + 1
+    seen[base] = count
+    if count > 1:
+        return f"{base}#{count}"
+    return base
 
 
 def umpire(fields: Mapping[str, FieldDef], rules: Sequence[object] = ()) -> "Umpire":
@@ -113,6 +196,703 @@ class Umpire:
         """Initialize Umpire with fields and rules."""
         self._fields = dict(fields)
         self._rules = list(rules)
+
+    def init(self, overrides: Mapping[str, Any] | None = None) -> dict[str, Any]:
+        """Return initial values for all known fields.
+
+        Args:
+            overrides: Optional mapping of field names to override values.
+                       Only known fields are accepted.
+
+        Returns:
+            Dict mapping field names to their initial values.
+
+        Raises:
+            ValueError: If an override key does not match any known field.
+        """
+        result: dict[str, Any] = {}
+        for field_name, field_def in self._fields.items():
+            result[field_name] = field_def.default_value
+        if overrides is not None:
+            for key, value in overrides.items():
+                if key not in self._fields:
+                    raise ValueError(f"Unknown field: {key}")
+                result[key] = value
+        return result
+
+    def rules(self) -> list[RuleEntry]:
+        """Return stable RuleEntry objects for all rules.
+
+        Returns:
+            List of RuleEntry, one per rule, preserving rule order.
+            IDs are deterministic and unique.
+        """
+        seen: dict[str, int] = {}
+        entries: list[RuleEntry] = []
+        for i, rule in enumerate(self._rules):
+            kind = _rule_kind(rule)
+            targets = _rule_targets(rule)
+            sources = _rule_sources(rule)
+            rule_id = _rule_id(rule, seen)
+            entries.append(
+                RuleEntry(
+                    index=i,
+                    id=rule_id,
+                    kind=kind,
+                    targets=targets,
+                    sources=sources,
+                )
+            )
+        return entries
+
+    def graph(self) -> UmpireGraph:
+        """Return the structural field graph.
+
+        Edges are created for:
+        - requires(dependency, target): dependency -> target (kind "requires")
+        - disables(source, targets): source -> target (kind "disables")
+        - one_of(group, branches): cross-branch field pairs (kind "one_of")
+        - any_of(...) / either_of(...): inner rule edges are included
+
+        No edges for: enabled_when, fair_when, predicate-only requires,
+        check, or empty-source disables.
+        """
+        nodes_set: set[str] = set(self._fields.keys())
+        edges: list[GraphEdge] = []
+
+        def collect_edges(rules: Sequence[object]) -> None:
+            for rule in rules:
+                if isinstance(rule, RequiresRule):
+                    if rule.dependency is not None:
+                        edges.append(
+                            GraphEdge(source=rule.dependency, target=rule.field, kind="requires")
+                        )
+                        nodes_set.add(rule.dependency)
+                        nodes_set.add(rule.field)
+                elif isinstance(rule, DisablesRule):
+                    if rule.source:
+                        nodes_set.add(rule.source)
+                        for target in rule.targets:
+                            edges.append(
+                                GraphEdge(source=rule.source, target=target, kind="disables")
+                            )
+                            nodes_set.add(target)
+                elif isinstance(rule, OneOfRule):
+                    branch_fields = list(rule.branches.values())
+                    for i, fields_a in enumerate(branch_fields):
+                        for fields_b in branch_fields[i + 1 :]:
+                            for fa in fields_a:
+                                for fb in fields_b:
+                                    edges.append(GraphEdge(source=fa, target=fb, kind="one_of"))
+                                    edges.append(GraphEdge(source=fb, target=fa, kind="one_of"))
+                                    nodes_set.add(fa)
+                                    nodes_set.add(fb)
+                elif isinstance(rule, AnyOfRule):
+                    collect_edges(rule.rules)
+                elif isinstance(rule, EitherOfRule):
+                    for branch_rules in rule.branches.values():
+                        collect_edges(branch_rules)
+
+        collect_edges(self._rules)
+
+        return UmpireGraph(
+            nodes=tuple(sorted(nodes_set)),
+            edges=tuple(edges),
+        )
+
+    def challenge(
+        self,
+        field: str,
+        values: Values,
+        conditions: Conditions | None = None,
+        previous_values: Values | None = None,
+    ) -> ChallengeTrace:
+        """Analyze why a field has its current availability state."""
+        if field not in self._fields:
+            raise ValueError(f"Unknown field: {field}")
+
+        if conditions is None:
+            conditions = {}
+
+        avail = self.check(values, conditions, previous_values)
+        field_avail = avail[field]
+
+        rule_entries = self.rules()
+
+        direct_reasons: list[ChallengeReason] = []
+        transitive_deps: list[Mapping[str, Any]] = []
+        one_of_resolution: Mapping[str, Any] | None = None
+
+        for i, rule in enumerate(self._rules):
+            targets = _rule_targets(rule)
+            if field not in targets:
+                continue
+
+            rule_id = rule_entries[i].id
+
+            if isinstance(rule, RequiresRule):
+                reasons, deps = self._challenge_requires(
+                    rule, field, i, rule_id, values, conditions, avail
+                )
+                direct_reasons.extend(reasons)
+                transitive_deps.extend(deps)
+
+            elif isinstance(rule, EnabledWhenRule):
+                direct_reasons.append(
+                    self._challenge_enabled_when(rule, field, i, rule_id, values, conditions)
+                )
+
+            elif isinstance(rule, FairWhenRule):
+                direct_reasons.append(
+                    self._challenge_fair_when(rule, field, i, rule_id, values, conditions)
+                )
+
+            elif isinstance(rule, DisablesRule):
+                direct_reasons.append(
+                    self._challenge_disables(rule, field, i, rule_id, values, conditions, avail)
+                )
+
+            elif isinstance(rule, OneOfRule):
+                reason, resolution = self._challenge_one_of(
+                    rule, field, i, rule_id, values, previous_values, avail
+                )
+                direct_reasons.append(reason)
+                if resolution is not None:
+                    one_of_resolution = resolution
+
+            elif isinstance(rule, CheckRule):
+                direct_reasons.append(self._challenge_check(rule, field, i, rule_id, values, avail))
+
+            elif isinstance(rule, AnyOfRule):
+                self._collect_challenge_reasons(
+                    rule.rules,
+                    field,
+                    values,
+                    conditions,
+                    previous_values,
+                    avail,
+                    rule_entries,
+                    direct_reasons,
+                    transitive_deps,
+                )
+
+            elif isinstance(rule, EitherOfRule):
+                for branch_rules in rule.branches.values():
+                    self._collect_challenge_reasons(
+                        branch_rules,
+                        field,
+                        values,
+                        conditions,
+                        previous_values,
+                        avail,
+                        rule_entries,
+                        direct_reasons,
+                        transitive_deps,
+                    )
+
+        return ChallengeTrace(
+            field=field,
+            enabled=field_avail.enabled,
+            fair=field_avail.fair,
+            direct_reasons=tuple(direct_reasons),
+            transitive_deps=tuple(transitive_deps),
+            one_of_resolution=one_of_resolution,
+        )
+
+    def _challenge_requires(
+        self,
+        rule: "RequiresRule",
+        field: str,
+        rule_index: int,
+        rule_id: str,
+        values: Values,
+        conditions: Conditions,
+        avail: Mapping[str, FieldAvailability],
+    ) -> tuple[list["ChallengeReason"], list[Mapping[str, Any]]]:
+        """Challenge a requires rule."""
+        transitive: list[Mapping[str, Any]] = []
+        reasons: list[ChallengeReason] = []
+
+        if rule.dependency is not None:
+            dep_status = avail.get(rule.dependency)
+            dep_ok = (
+                dep_status is not None
+                and dep_status.enabled
+                and dep_status.fair
+                and dep_status.satisfied
+            )
+            when_ok = rule.when is None or rule.when(values, conditions)
+            passed = dep_ok and when_ok
+
+            dep_value = values.get(rule.dependency)
+            reasons.append(
+                ChallengeReason(
+                    rule="requires",
+                    passed=passed,
+                    reason=rule.reason or f"requires {rule.dependency}" if not passed else None,
+                    rule_index=rule_index,
+                    rule_id=rule_id,
+                    details={
+                        "dependency": rule.dependency,
+                        "dependency_value": dep_value,
+                        "dependency_satisfied": dep_status.satisfied if dep_status else False,
+                        "dependency_enabled": dep_status.enabled if dep_status else False,
+                        "dependency_fair": dep_status.fair if dep_status else False,
+                    },
+                )
+            )
+
+            if not passed:
+                transitive.append(
+                    {
+                        "field": rule.dependency,
+                        "enabled": dep_status.enabled if dep_status else False,
+                        "fair": dep_status.fair if dep_status else False,
+                        "satisfied": dep_status.satisfied if dep_status else False,
+                        "reason": dep_status.reason or "not available"
+                        if dep_status
+                        else "unknown field",
+                    }
+                )
+        else:
+            predicate_result = rule.when(values, conditions) if rule.when else True
+            passed = predicate_result
+            reasons.append(
+                ChallengeReason(
+                    rule="requires",
+                    passed=passed,
+                    reason=None if passed else (rule.reason or "required condition not met"),
+                    rule_index=rule_index,
+                    rule_id=rule_id,
+                    details={"predicate_result": predicate_result},
+                )
+            )
+
+        return reasons, transitive
+
+    def _challenge_enabled_when(
+        self,
+        rule: "EnabledWhenRule",
+        field: str,
+        rule_index: int,
+        rule_id: str,
+        values: Values,
+        conditions: Conditions,
+    ) -> "ChallengeReason":
+        """Challenge an enabled_when rule."""
+        predicate_result = rule.when(values, conditions)
+        field_def = self._fields.get(field, FieldDef())
+        value = values.get(field, field_def.default_value)
+        return ChallengeReason(
+            rule="enabled_when",
+            passed=predicate_result,
+            reason=None if predicate_result else (rule.reason or "condition not met"),
+            rule_index=rule_index,
+            rule_id=rule_id,
+            details={"predicate_result": predicate_result, "field_value": value},
+        )
+
+    def _challenge_fair_when(
+        self,
+        rule: "FairWhenRule",
+        field: str,
+        rule_index: int,
+        rule_id: str,
+        values: Values,
+        conditions: Conditions,
+    ) -> "ChallengeReason":
+        """Challenge a fair_when rule."""
+        predicate_result = rule.when(values, conditions)
+        field_def = self._fields.get(field, FieldDef())
+        value = values.get(field, field_def.default_value)
+        return ChallengeReason(
+            rule="fair_when",
+            passed=predicate_result,
+            reason=None if predicate_result else (rule.reason or "selection is no longer valid"),
+            rule_index=rule_index,
+            rule_id=rule_id,
+            details={"predicate_result": predicate_result, "field_value": value},
+        )
+
+    def _challenge_disables(
+        self,
+        rule: "DisablesRule",
+        field: str,
+        rule_index: int,
+        rule_id: str,
+        values: Values,
+        conditions: Conditions,
+        avail: Mapping[str, FieldAvailability],
+    ) -> "ChallengeReason":
+        """Challenge a disables rule from the target field's perspective."""
+        source_active = (
+            rule.source == "" or (rule.source in avail and avail[rule.source].satisfied)
+        ) and (rule.when is None or rule.when(values, conditions))
+        passed = not source_active
+
+        source_value = values.get(rule.source) if rule.source else None
+        source_satisfied = (
+            avail[rule.source].satisfied if rule.source and rule.source in avail else False
+        )
+        return ChallengeReason(
+            rule="disables",
+            passed=passed,
+            reason=None if passed else (rule.reason or f"overridden by {rule.source}"),
+            rule_index=rule_index,
+            rule_id=rule_id,
+            details={
+                "source": rule.source or "",
+                "source_value": source_value,
+                "source_satisfied": source_satisfied,
+                "source_active": source_active,
+            },
+        )
+
+    def _challenge_one_of(
+        self,
+        rule: "OneOfRule",
+        field: str,
+        rule_index: int,
+        rule_id: str,
+        values: Values,
+        previous_values: Values | None,
+        avail: Mapping[str, FieldAvailability],
+    ) -> tuple["ChallengeReason", Mapping[str, Any] | None]:
+        """Challenge a one_of rule for a field."""
+        active_branch = self._resolve_one_of_branch(rule, values, previous_values)
+
+        active_fields: set[str] = set()
+        if active_branch is not None:
+            active_fields = set(rule.branches.get(active_branch, []))
+        field_in_active = field in active_fields
+
+        resolution: dict[str, Any] | None = None
+        if active_branch is not None:
+            all_branches: dict[str, list[str]] = dict(rule.branches.items())
+            resolution = {
+                "group": rule.group,
+                "active_branch": active_branch,
+                "this_branch": next(
+                    (name for name, fields in rule.branches.items() if field in fields), None
+                ),
+                "branches": {
+                    name: {
+                        "fields": fields,
+                        "is_active": name == active_branch,
+                    }
+                    for name, fields in all_branches.items()
+                },
+            }
+
+        passed = active_branch is None or field_in_active
+        return (
+            ChallengeReason(
+                rule="one_of",
+                passed=passed,
+                reason=None
+                if passed
+                else (rule.reason or f"conflicts with {active_branch} strategy"),
+                rule_index=rule_index,
+                rule_id=rule_id,
+                details={
+                    "group": rule.group,
+                    "active_branch": active_branch,
+                    "field_in_active": field_in_active,
+                },
+            ),
+            resolution,
+        )
+
+    def _challenge_check(
+        self,
+        rule: "CheckRule",
+        field: str,
+        rule_index: int,
+        rule_id: str,
+        values: Values,
+        avail: Mapping[str, FieldAvailability],
+    ) -> "ChallengeReason":
+        """Challenge a check rule."""
+        field_avail = avail.get(field)
+        if field_avail is None or not field_avail.enabled or not field_avail.satisfied:
+            return ChallengeReason(
+                rule="check",
+                passed=True,
+                reason=None,
+                rule_index=rule_index,
+                rule_id=rule_id,
+                details={"skipped": True, "reason": "field not enabled or not satisfied"},
+            )
+
+        field_def = self._fields.get(field, FieldDef())
+        value = values.get(field, field_def.default_value)
+        error = rule.op(value, field)
+
+        passed = error is None
+        return ChallengeReason(
+            rule="check",
+            passed=passed,
+            reason=error.reason if error else None,
+            rule_index=rule_index,
+            rule_id=rule_id,
+            details={
+                "error": error.reason if error else None,
+                "affects_fair": rule.affects_fair,
+                "validation": rule.validation,
+            },
+        )
+
+    def _collect_challenge_reasons(
+        self,
+        rules: Sequence[object],
+        field: str,
+        values: Values,
+        conditions: Conditions,
+        previous_values: Values | None,
+        avail: Mapping[str, FieldAvailability],
+        rule_entries: list["RuleEntry"],
+        direct_reasons: list["ChallengeReason"],
+        transitive_deps: list[Mapping[str, Any]],
+    ) -> None:
+        """Recursively collect challenge reasons from inner rules."""
+        for inner_rule in rules:
+            targets = _rule_targets(inner_rule)
+            if field not in targets:
+                if isinstance(inner_rule, AnyOfRule):
+                    self._collect_challenge_reasons(
+                        inner_rule.rules,
+                        field,
+                        values,
+                        conditions,
+                        previous_values,
+                        avail,
+                        rule_entries,
+                        direct_reasons,
+                        transitive_deps,
+                    )
+                elif isinstance(inner_rule, EitherOfRule):
+                    for branch_rules in inner_rule.branches.values():
+                        self._collect_challenge_reasons(
+                            branch_rules,
+                            field,
+                            values,
+                            conditions,
+                            previous_values,
+                            avail,
+                            rule_entries,
+                            direct_reasons,
+                            transitive_deps,
+                        )
+                continue
+
+            inner_index = self._rules.index(inner_rule) if inner_rule in self._rules else -1
+            inner_id = ""
+            if 0 <= inner_index < len(rule_entries):
+                inner_id = rule_entries[inner_index].id
+
+            if isinstance(inner_rule, RequiresRule):
+                reasons, deps = self._challenge_requires(
+                    inner_rule, field, inner_index, inner_id, values, conditions, avail
+                )
+                direct_reasons.extend(reasons)
+                transitive_deps.extend(deps)
+            elif isinstance(inner_rule, EnabledWhenRule):
+                direct_reasons.append(
+                    self._challenge_enabled_when(
+                        inner_rule, field, inner_index, inner_id, values, conditions
+                    )
+                )
+            elif isinstance(inner_rule, FairWhenRule):
+                direct_reasons.append(
+                    self._challenge_fair_when(
+                        inner_rule, field, inner_index, inner_id, values, conditions
+                    )
+                )
+            elif isinstance(inner_rule, DisablesRule):
+                direct_reasons.append(
+                    self._challenge_disables(
+                        inner_rule, field, inner_index, inner_id, values, conditions, avail
+                    )
+                )
+            elif isinstance(inner_rule, OneOfRule):
+                reason, _resolution = self._challenge_one_of(
+                    inner_rule, field, inner_index, inner_id, values, previous_values, avail
+                )
+                direct_reasons.append(reason)
+            elif isinstance(inner_rule, CheckRule):
+                direct_reasons.append(
+                    self._challenge_check(inner_rule, field, inner_index, inner_id, values, avail)
+                )
+            elif isinstance(inner_rule, AnyOfRule):
+                self._collect_challenge_reasons(
+                    inner_rule.rules,
+                    field,
+                    values,
+                    conditions,
+                    previous_values,
+                    avail,
+                    rule_entries,
+                    direct_reasons,
+                    transitive_deps,
+                )
+            elif isinstance(inner_rule, EitherOfRule):
+                for branch_rules in inner_rule.branches.values():
+                    self._collect_challenge_reasons(
+                        branch_rules,
+                        field,
+                        values,
+                        conditions,
+                        previous_values,
+                        avail,
+                        rule_entries,
+                        direct_reasons,
+                        transitive_deps,
+                    )
+
+    def scorecard(
+        self,
+        values: Values,
+        conditions: Conditions | None = None,
+        previous_values: Values | None = None,
+        include_challenge: bool = False,
+    ) -> Scorecard:
+        if conditions is None:
+            conditions = {}
+
+        check_result = self.check(values, conditions, previous_values)
+        graph_result = self.graph()
+
+        fields: dict[str, ScorecardField] = {}
+        for field_name, field_def in self._fields.items():
+            avail = check_result[field_name]
+            value = values.get(field_name, field_def.default_value)
+            present = field_name in values
+
+            incoming: list[GraphEdge] = []
+            outgoing: list[GraphEdge] = []
+            for edge in graph_result.edges:
+                if edge.target == field_name:
+                    incoming.append(edge)
+                if edge.source == field_name:
+                    outgoing.append(edge)
+
+            trace = None
+            if include_challenge:
+                trace = self.challenge(field_name, values, conditions, previous_values)
+
+            fields[field_name] = ScorecardField(
+                field=field_name,
+                value=value,
+                present=present,
+                satisfied=avail.satisfied,
+                enabled=avail.enabled,
+                fair=avail.fair,
+                required=avail.required,
+                reason=avail.reason,
+                reasons=avail.reasons,
+                changed=False,
+                cascaded=False,
+                foul=None,
+                incoming=tuple(incoming),
+                outgoing=tuple(outgoing),
+                trace=trace,
+            )
+
+        changed_field_names: tuple[str, ...] = ()
+        fouls: tuple[Foul, ...] = ()
+        fouls_by_field: dict[str, Foul] = {}
+        fouled_field_names: tuple[str, ...] = ()
+        directly_fouled_field_names: tuple[str, ...] = ()
+        cascading_field_names: tuple[str, ...] = ()
+
+        if previous_values is not None:
+            before_check = self.check(previous_values, conditions)
+            fouls = tuple(self.play(before_check, check_result, values))
+
+            fouls_by_field = {f.field: f for f in fouls}
+            fouled_field_names = tuple(sorted(fouls_by_field.keys()))
+
+            changed_set: set[str] = set()
+            for field_name in self._fields:
+                prev_value = previous_values.get(field_name, _UNCHANGED)
+                curr_value = values.get(field_name, _UNCHANGED)
+                if prev_value != curr_value:
+                    changed_set.add(field_name)
+            changed_field_names = tuple(sorted(changed_set))
+
+            directly_fouled = set(fouled_field_names) & changed_set
+            directly_fouled_field_names = tuple(sorted(directly_fouled))
+
+            cascading_set: set[str] = set()
+            for field_name in self._fields:
+                before_avail = before_check.get(field_name)
+                after_avail = check_result.get(field_name)
+                if (
+                    before_avail is not None
+                    and after_avail is not None
+                    and before_avail != after_avail
+                ):
+                    value_changed = field_name in changed_set
+                    if not value_changed:
+                        cascading_set.add(field_name)
+            cascading_field_names = tuple(sorted(cascading_set))
+
+            for field_name in fouled_field_names:
+                sf = fields[field_name]
+                fields[field_name] = ScorecardField(
+                    field=sf.field,
+                    value=sf.value,
+                    present=sf.present,
+                    satisfied=sf.satisfied,
+                    enabled=sf.enabled,
+                    fair=sf.fair,
+                    required=sf.required,
+                    reason=sf.reason,
+                    reasons=sf.reasons,
+                    changed=field_name in changed_set,
+                    cascaded=field_name in cascading_set,
+                    foul=fouls_by_field.get(field_name),
+                    incoming=sf.incoming,
+                    outgoing=sf.outgoing,
+                    trace=sf.trace,
+                )
+
+            for field_name in self._fields:
+                if field_name in fouled_field_names:
+                    continue
+                sf = fields[field_name]
+                is_changed = field_name in changed_set
+                is_cascaded = field_name in cascading_set
+                if is_changed or is_cascaded:
+                    fields[field_name] = ScorecardField(
+                        field=sf.field,
+                        value=sf.value,
+                        present=sf.present,
+                        satisfied=sf.satisfied,
+                        enabled=sf.enabled,
+                        fair=sf.fair,
+                        required=sf.required,
+                        reason=sf.reason,
+                        reasons=sf.reasons,
+                        changed=is_changed,
+                        cascaded=is_cascaded,
+                        foul=None,
+                        incoming=sf.incoming,
+                        outgoing=sf.outgoing,
+                        trace=sf.trace,
+                    )
+
+        return Scorecard(
+            check=check_result,
+            graph=graph_result,
+            fields=fields,
+            changed_fields=changed_field_names,
+            fouls=fouls,
+            fouls_by_field=fouls_by_field,
+            fouled_fields=fouled_field_names,
+            directly_fouled_fields=directly_fouled_field_names,
+            cascading_fields=cascading_field_names,
+        )
 
     def check(
         self,
@@ -201,6 +981,7 @@ class Umpire:
             changed_fields = {f for f, a in result.items() if before.get(f) != a}
             current_changed: set[tuple[str, str]] = set()
             for rule in dependency_rules:
+                assert rule.dependency is not None  # filtered above
                 chain_key = (rule.field, rule.dependency)
                 if changed_fields & {rule.field, rule.dependency}:
                     if chain_key in prev_changed:
@@ -424,14 +1205,14 @@ class Umpire:
 
         # Determine which branches pass holistically
         passing_indices: list[int] = []
-        for i, (snapshot, targets) in enumerate(zip(branch_snapshots, branch_targets)):
+        for i, (snapshot, targets) in enumerate(
+            zip(branch_snapshots, branch_targets, strict=False)
+        ):
             if not targets:
                 # Branch with zero leaf targets passes trivially
                 passing_indices.append(i)
             elif all(
-                field in snapshot
-                and snapshot[field].enabled
-                and snapshot[field].fair
+                field in snapshot and snapshot[field].enabled and snapshot[field].fair
                 for field in targets
             ):
                 passing_indices.append(i)
@@ -582,7 +1363,9 @@ class Umpire:
         return fouls
 
     async def check_async(
-        self, values: Values, conditions: Mapping[str, Any] | None = None,
+        self,
+        values: Values,
+        conditions: Mapping[str, Any] | None = None,
         previous_values: Values | None = None,
     ) -> Mapping[str, FieldAvailability]:
         """

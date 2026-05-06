@@ -1,5 +1,3 @@
-import math
-
 from umpire import (
     FieldAvailability,
     FieldDef,

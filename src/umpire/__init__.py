@@ -26,21 +26,35 @@ from .rules import (
 )
 from .schema import UmpireSchema, UmpireSchemaError
 from .types import (
+    ChallengeReason,
+    ChallengeTrace,
     CheckError,
     FieldAvailability,
     FieldDef,
     Foul,
+    GraphEdge,
     IsEmptyStrategy,
+    RuleEntry,
+    Scorecard,
+    ScorecardField,
+    UmpireGraph,
 )
 
 __all__ = [
+    "ChallengeReason",
+    "ChallengeTrace",
     "CheckError",
     "CheckOp",
     "FieldAvailability",
     "FieldDef",
     "Foul",
+    "GraphEdge",
     "IsEmptyStrategy",
+    "RuleEntry",
+    "Scorecard",
+    "ScorecardField",
     "Umpire",
+    "UmpireGraph",
     "UmpireSchema",
     "UmpireSchemaError",
     "__version__",

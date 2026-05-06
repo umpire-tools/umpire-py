@@ -133,22 +133,25 @@ def test_any_of_rule_evaluation() -> None:
 
 
 def test_either_of_per_branch_evaluation() -> None:
-    """Either_of evaluates branches holistically — a branch passes only when ALL its targets pass."""
+    """Either_of evaluates branches holistically — passes when all targets pass."""
     fields = {
         "email": FieldDef(required=False),
         "phone": FieldDef(required=False),
     }
     rules = [
-        either_of("contact", {
-            "branch_a": [
-                enabled_when("email", when=lambda v, c: True),
-                enabled_when("phone", when=lambda v, c: False, reason="phone disabled in A"),
-            ],
-            "branch_b": [
-                enabled_when("email", when=lambda v, c: False, reason="email disabled in B"),
-                enabled_when("phone", when=lambda v, c: True),
-            ],
-        })
+        either_of(
+            "contact",
+            {
+                "branch_a": [
+                    enabled_when("email", when=lambda v, c: True),
+                    enabled_when("phone", when=lambda v, c: False, reason="phone disabled in A"),
+                ],
+                "branch_b": [
+                    enabled_when("email", when=lambda v, c: False, reason="email disabled in B"),
+                    enabled_when("phone", when=lambda v, c: True),
+                ],
+            },
+        )
     ]
     u = umpire(fields, rules)
     result = u.check({"email": "a@b.com", "phone": "555"})
@@ -171,15 +174,18 @@ def test_either_of_all_branches_fail() -> None:
         "phone": FieldDef(required=False),
     }
     rules = [
-        either_of("contact", {
-            "branch_a": [
-                enabled_when("email", when=lambda v, c: False, reason="bad email"),
-                enabled_when("phone", when=lambda v, c: False, reason="bad phone"),
-            ],
-            "branch_b": [
-                enabled_when("email", when=lambda v, c: False, reason="also bad email"),
-            ],
-        })
+        either_of(
+            "contact",
+            {
+                "branch_a": [
+                    enabled_when("email", when=lambda v, c: False, reason="bad email"),
+                    enabled_when("phone", when=lambda v, c: False, reason="bad phone"),
+                ],
+                "branch_b": [
+                    enabled_when("email", when=lambda v, c: False, reason="also bad email"),
+                ],
+            },
+        )
     ]
     u = umpire(fields, rules)
     result = u.check({"email": "a@b.com", "phone": "555"})
@@ -196,14 +202,17 @@ def test_either_of_non_overlapping_targets() -> None:
         "phone": FieldDef(required=False),
     }
     rules = [
-        either_of("contact", {
-            "email_branch": [
-                enabled_when("email", when=lambda v, c: True),
-            ],
-            "phone_branch": [
-                enabled_when("phone", when=lambda v, c: True),
-            ],
-        })
+        either_of(
+            "contact",
+            {
+                "email_branch": [
+                    enabled_when("email", when=lambda v, c: True),
+                ],
+                "phone_branch": [
+                    enabled_when("phone", when=lambda v, c: True),
+                ],
+            },
+        )
     ]
     u = umpire(fields, rules)
     result = u.check({"email": "a@b.com", "phone": "555"})
@@ -218,12 +227,15 @@ def test_either_of_branch_zero_targets() -> None:
     }
     empty_one_of_rule = one_of("empty_group", {})
     rules = [
-        either_of("test", {
-            "empty": [empty_one_of_rule],
-            "fail": [
-                enabled_when("email", when=lambda v, c: False, reason="disabled"),
-            ],
-        })
+        either_of(
+            "test",
+            {
+                "empty": [empty_one_of_rule],
+                "fail": [
+                    enabled_when("email", when=lambda v, c: False, reason="disabled"),
+                ],
+            },
+        )
     ]
     u = umpire(fields, rules)
     result = u.check({"email": "a@b.com"})
@@ -237,21 +249,27 @@ def test_either_of_nested_one_of_targets() -> None:
         "phone": FieldDef(required=False),
     }
 
-    inner_one_of = one_of("inner_group", {
-        "a": ["email"],
-        "b": ["phone"],
-    })
+    inner_one_of = one_of(
+        "inner_group",
+        {
+            "a": ["email"],
+            "b": ["phone"],
+        },
+    )
 
     rules = [
-        either_of("outer", {
-            "branch_1": [
-                enabled_when("email", when=lambda v, c: True),
-                inner_one_of,
-            ],
-            "branch_2": [
-                enabled_when("email", when=lambda v, c: False, reason="nope"),
-            ],
-        })
+        either_of(
+            "outer",
+            {
+                "branch_1": [
+                    enabled_when("email", when=lambda v, c: True),
+                    inner_one_of,
+                ],
+                "branch_2": [
+                    enabled_when("email", when=lambda v, c: False, reason="nope"),
+                ],
+            },
+        )
     ]
     u = umpire(fields, rules)
     result = u.check({"email": "a@b.com", "phone": "555"})
@@ -270,20 +288,23 @@ def test_either_of_nested_one_of_targets() -> None:
 
 
 def test_either_of_overlapping_both_pass() -> None:
-    """When multiple branches pass and target overlapping fields, first branch's full snapshot wins."""
+    """When multiple branches pass on overlapping fields, first branch wins."""
     fields = {
         "email": FieldDef(required=False),
         "phone": FieldDef(required=False),
     }
     rules = [
-        either_of("contact", {
-            "email_first": [
-                enabled_when("email", when=lambda v, c: True),
-            ],
-            "phone_first": [
-                enabled_when("phone", when=lambda v, c: True),
-            ],
-        })
+        either_of(
+            "contact",
+            {
+                "email_first": [
+                    enabled_when("email", when=lambda v, c: True),
+                ],
+                "phone_first": [
+                    enabled_when("phone", when=lambda v, c: True),
+                ],
+            },
+        )
     ]
     u = umpire(fields, rules)
     result = u.check({"email": "a@b.com", "phone": "555"})

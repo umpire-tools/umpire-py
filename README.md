@@ -193,6 +193,54 @@ u = umpire(
 result = await u.check_async({}, {"is_admin": is_admin_provider})
 ```
 
+## Debugging
+
+Umpire provides several inspection surfaces to help understand why fields are
+available, disabled, or fouled.
+
+```python
+from umpire import umpire, FieldDef
+
+u = umpire({"email": FieldDef(), "name": FieldDef()})
+
+# Get initial values for all fields
+defaults = u.init()
+# Apply overrides
+configured = u.init(overrides={"email": "user@example.com"})
+
+# List rules with stable IDs
+for entry in u.rules():
+    print(entry.id, entry.kind, entry.targets)
+
+# Visualize field relationships
+graph = u.graph()
+for edge in graph.edges:
+    print(f"{edge.source} -> {edge.target} ({edge.kind})")
+
+# Analyze why a field is in its current state
+trace = u.challenge("email", {"email": ""})
+for reason in trace.direct_reasons:
+    print(f"{reason.rule}: passed={reason.passed} {reason.reason or ''}")
+
+# Full scorecard with transition analysis
+card = u.scorecard(
+    values={"email": ""},
+    previous_values={"email": "old@example.com"},
+    include_challenge=True,
+)
+print(card.changed_fields)
+print([f.field for f in card.fouls])
+```
+
+### Scorecard transition analysis
+
+When `previous_values` is provided, `scorecard()` performs full transition analysis:
+
+- **changed_fields** — fields whose value changed between `previous_values` and `values`
+- **fouls** — fields that became disabled or unfair during the transition
+- **directly_fouled_fields** — fields fouled because their own value changed
+- **cascading_fields** — fields whose availability changed due to another field's change
+
 ## Development
 
 Requires [uv](https://docs.astral.sh/uv/).

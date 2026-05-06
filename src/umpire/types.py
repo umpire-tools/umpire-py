@@ -1,7 +1,7 @@
 """Core type definitions for Umpire."""
 
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
@@ -72,3 +72,75 @@ Conditions = Mapping[str, Any]
 Predicate = Callable[[Values, Conditions], bool]
 
 
+@dataclass(frozen=True)
+class GraphEdge:
+    source: str
+    target: str
+    kind: str
+
+
+@dataclass(frozen=True)
+class UmpireGraph:
+    nodes: tuple[str, ...]
+    edges: tuple[GraphEdge, ...]
+
+
+@dataclass(frozen=True)
+class RuleEntry:
+    index: int
+    id: str
+    kind: str
+    targets: tuple[str, ...]
+    sources: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class ChallengeReason:
+    rule: str
+    passed: bool
+    reason: str | None = None
+    rule_index: int | None = None
+    rule_id: str | None = None
+    details: Mapping[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class ChallengeTrace:
+    field: str
+    enabled: bool
+    fair: bool
+    direct_reasons: tuple[ChallengeReason, ...]
+    transitive_deps: tuple[Mapping[str, Any], ...] = ()
+    one_of_resolution: Mapping[str, Any] | None = None
+
+
+@dataclass(frozen=True)
+class ScorecardField:
+    field: str
+    value: Any
+    present: bool
+    satisfied: bool
+    enabled: bool
+    fair: bool
+    required: bool
+    reason: str | None
+    reasons: tuple[str, ...]
+    changed: bool
+    cascaded: bool
+    foul: Foul | None
+    incoming: tuple[GraphEdge, ...]
+    outgoing: tuple[GraphEdge, ...]
+    trace: ChallengeTrace | None = None
+
+
+@dataclass(frozen=True)
+class Scorecard:
+    check: Mapping[str, FieldAvailability]
+    graph: UmpireGraph
+    fields: Mapping[str, ScorecardField]
+    changed_fields: tuple[str, ...]
+    fouls: tuple[Foul, ...]
+    fouls_by_field: Mapping[str, Foul]
+    fouled_fields: tuple[str, ...]
+    directly_fouled_fields: tuple[str, ...]
+    cascading_fields: tuple[str, ...]

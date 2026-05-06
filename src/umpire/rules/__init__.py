@@ -63,9 +63,7 @@ def any_of(rules: Sequence[object]) -> "AnyOfRule":
     has_fair = any(isinstance(r, fair_types) for r in rule_list)
 
     if has_enabled and has_fair:
-        raise ValueError(
-            "any_of rules must all affect 'enabled' or all affect 'fair', not mixed"
-        )
+        raise ValueError("any_of rules must all affect 'enabled' or all affect 'fair', not mixed")
 
     return AnyOfRule(rule_list)
 
