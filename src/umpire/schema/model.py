@@ -257,7 +257,9 @@ def _parse_validators(validators: Mapping[str, Any], field_names: set[str]) -> l
         if not isinstance(spec, Mapping):
             raise UmpireSchemaError(f'Validator for "{field}" must be a dictionary')
         reason = _optional_string(spec, "error")
-        rules.append(CheckRule(field, _parse_check_op(spec, reason), validation=True))
+        rules.append(
+            CheckRule(field, _parse_check_op(spec, reason), affects_fair=False, validation=True)
+        )
     return rules
 
 
