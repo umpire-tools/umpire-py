@@ -16,3 +16,4 @@ build/
 .venv/
 venv/
 .DS_Store
+spec/

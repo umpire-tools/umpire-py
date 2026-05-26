@@ -1,0 +1,46 @@
+[env]
+UMPIRE_JSON_CONFORMANCE_DIR = "spec/conformance"
+UMPIRE_SPEC_VERSION = "v1.0.0"
+UMPIRE_SPEC_SHA256 = "71e7d71391e90eefe4c46c1266fbd7d57ba39f5ef72360f9a8b1c593f576fed3"
+
+[tasks.spec-sync]
+description = "Sync umpire-spec fixtures into spec/ at the pinned tag"
+sources = ["mise.toml"]
+outputs = ["spec/.synced-at-version"]
+run = """
+set -euo pipefail
+tarball=$(mktemp -t umpire-spec-XXXXXX.tar.gz)
+curl -fsSL "https://github.com/umpire-tools/umpire-spec/archive/refs/tags/${UMPIRE_SPEC_VERSION}.tar.gz" -o "$tarball"
+echo "${UMPIRE_SPEC_SHA256}  $tarball" | shasum -a 256 -c -
+rm -rf spec/
+mkdir -p spec/
+tar -xzf "$tarball" -C spec/ --strip-components=1
+echo "${UMPIRE_SPEC_VERSION}" > spec/.synced-at-version
+rm "$tarball"
+"""
+
+[tasks.sync]
+run = "uv sync --extra dev"
+
+[tasks.lint]
+run = "uv run ruff check ."
+
+[tasks.format]
+run = "uv run ruff format --check ."
+
+[tasks.typecheck]
+run = "uv run mypy src"
+
+[tasks.test]
+depends = ["spec-sync"]
+run = "uv run pytest"
+
+[tasks.check]
+depends = ["spec-sync"]
+run = ["uv run ruff check .", "uv run ruff format --check .", "uv run mypy src", "uv run pytest"]
+
+[tasks.build]
+run = "uv build"
+
+[tasks.clean]
+run = "rm -rf dist build *.egg-info .pytest_cache .mypy_cache .ruff_cache .coverage htmlcov"
