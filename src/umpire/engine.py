@@ -915,7 +915,7 @@ class Umpire:
 
         result: dict[str, FieldAvailability] = {}
         for field_name, field_def in self._fields.items():
-            value = values.get(field_name, field_def.default_value)
+            value = values.get(field_name)
             satisfied = _is_satisfied(value, field_def)
             result[field_name] = FieldAvailability(
                 enabled=True,
@@ -1338,7 +1338,7 @@ class Umpire:
         for field_name, after_avail in after.items():
             before_avail = before.get(field_name)
             field_def = self._fields.get(field_name, FieldDef())
-            value = values.get(field_name, field_def.default_value)
+            value = values.get(field_name)
             if before_avail is None or not _is_satisfied(value, field_def):
                 continue
 
