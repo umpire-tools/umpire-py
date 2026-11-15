@@ -1,6 +1,7 @@
 """Schema model for Umpire."""
 
 import json
+import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
@@ -17,11 +18,11 @@ from ..rules import (
     requires,
 )
 from ..types import FieldDef, IsEmptyStrategy
+from .errors import UmpireSchemaError
 from .expr import ExpressionCompiler
+from .validate import validate_document
 
-
-class UmpireSchemaError(Exception):
-    """Exception raised for Umpire schema errors."""
+__all__ = ["UmpireSchema", "UmpireSchemaError"]
 
 
 @dataclass
@@ -41,25 +42,25 @@ class UmpireSchema:
         if not isinstance(dict_obj, Mapping):
             raise UmpireSchemaError("Schema must be a dictionary")
 
-        version = dict_obj.get("version")
-        if version != 1:
-            raise UmpireSchemaError("Only version 1 schemas are supported")
+        validate_document(dict_obj)
 
-        fields = _parse_fields(_mapping(dict_obj, "fields", default={}))
-        conditions = dict(_mapping(dict_obj, "conditions", default={}))
-        condition_types = _condition_types(conditions)
+        # Shape is settled above, so parsing enforces only the semantics the walk
+        # does not cover: references, check operands, and isEmpty strategy names.
+        version = dict_obj["version"]
+        fields = _parse_fields(dict_obj["fields"])
+        conditions: dict[str, Any] = dict(dict_obj.get("conditions", {}))
         compiler = ExpressionCompiler(
             field_names=fields.keys(),
             condition_names=conditions.keys() if conditions else None,
-            condition_types=condition_types,
+            condition_types=_condition_types(conditions),
         )
         rules = _parse_rules(
-            _sequence(dict_obj, "rules", default=[]),
+            dict_obj["rules"],
             field_names=set(fields),
             compiler=compiler,
         )
-        rules.extend(_parse_validators(_mapping(dict_obj, "validators", default={}), set(fields)))
-        excluded = tuple(dict(entry) for entry in _sequence(dict_obj, "excluded", default=[]))
+        rules.extend(_parse_validators(dict_obj.get("validators", {}), set(fields)))
+        excluded = tuple(dict(entry) for entry in dict_obj.get("excluded", ()))
         warnings = tuple(_excluded_warning(entry) for entry in excluded)
 
         return cls(
@@ -94,14 +95,12 @@ def _parse_fields(fields_dict: Mapping[str, Any]) -> dict[str, FieldDef]:
     for field_name, field_def_dict in fields_dict.items():
         if not isinstance(field_name, str):
             raise UmpireSchemaError("Field names must be strings")
-        if not isinstance(field_def_dict, Mapping):
-            raise UmpireSchemaError(f"Field definition for '{field_name}' must be a dictionary")
 
         required = field_def_dict.get("required", False)
         if not isinstance(required, bool):
             raise UmpireSchemaError(f"Field '{field_name}' required must be a boolean")
 
-        default_value = field_def_dict.get("default", field_def_dict.get("defaultValue"))
+        default_value = field_def_dict.get("default")
         is_empty_str = field_def_dict.get("isEmpty", "present")
 
         try:
@@ -126,8 +125,6 @@ def _parse_rules(
 ) -> list[object]:
     rules: list[object] = []
     for rule_obj in rules_list:
-        if not isinstance(rule_obj, Mapping):
-            raise UmpireSchemaError("Rule must be a dictionary")
         rules.extend(_parse_rule(rule_obj, field_names=field_names, compiler=compiler))
     return rules
 
@@ -139,13 +136,11 @@ def _parse_rule(
     compiler: ExpressionCompiler,
 ) -> list[object]:
     rule_type = rule_obj.get("type")
-    if not isinstance(rule_type, str):
-        raise UmpireSchemaError("Rule must include a string type")
 
     try:
         if rule_type == "requires":
             field = _field(rule_obj, "field", field_names)
-            reason = _optional_string(rule_obj, "reason")
+            reason = rule_obj.get("reason")
             if "dependency" in rule_obj:
                 return [
                     requires(
@@ -153,7 +148,7 @@ def _parse_rule(
                     )
                 ]
             if "dependencies" in rule_obj:
-                dependencies = _sequence(rule_obj, "dependencies")
+                dependencies = rule_obj["dependencies"]
                 if not dependencies:
                     raise UmpireSchemaError("requires dependencies must not be empty")
                 parsed: list[object] = []
@@ -168,19 +163,13 @@ def _parse_rule(
                     else:
                         raise UmpireSchemaError("requires dependency must be a field or expression")
                 return parsed
-            return [
-                enabled_when(
-                    field, compiler.compile_expr(_mapping(rule_obj, "when")), reason=reason
-                )
-            ]
+            return [enabled_when(field, compiler.compile_expr(rule_obj["when"]), reason=reason)]
 
         if rule_type == "enabledWhen":
             field = _field(rule_obj, "field", field_names)
             return [
                 enabled_when(
-                    field,
-                    compiler.compile_expr(_mapping(rule_obj, "when")),
-                    reason=_optional_string(rule_obj, "reason"),
+                    field, compiler.compile_expr(rule_obj["when"]), reason=rule_obj.get("reason")
                 )
             ]
 
@@ -188,9 +177,7 @@ def _parse_rule(
             field = _field(rule_obj, "field", field_names)
             return [
                 fair_when(
-                    field,
-                    compiler.compile_expr(_mapping(rule_obj, "when")),
-                    reason=_optional_string(rule_obj, "reason"),
+                    field, compiler.compile_expr(rule_obj["when"]), reason=rule_obj.get("reason")
                 )
             ]
 
@@ -198,14 +185,14 @@ def _parse_rule(
             targets = [
                 _known_field(target, field_names) for target in _sequence(rule_obj, "targets")
             ]
-            reason = _optional_string(rule_obj, "reason")
+            reason = rule_obj.get("reason")
             if "source" in rule_obj:
                 return [disables(_field(rule_obj, "source", field_names), targets, reason=reason)]
             return [
                 disables(
                     "",
                     targets,
-                    when=compiler.compile_expr(_mapping(rule_obj, "when")),
+                    when=compiler.compile_expr(rule_obj["when"]),
                     reason=reason,
                 )
             ]
@@ -215,9 +202,7 @@ def _parse_rule(
             return [one_of(_string(rule_obj, "group"), _parse_branches(branches, field_names))]
 
         if rule_type == "anyOf":
-            inner = _parse_rules(
-                _sequence(rule_obj, "rules"), field_names=field_names, compiler=compiler
-            )
+            inner = _parse_rules(rule_obj["rules"], field_names=field_names, compiler=compiler)
             return [any_of(inner)]
 
         if rule_type == "eitherOf":
@@ -240,7 +225,7 @@ def _parse_rule(
             return [
                 CheckRule(
                     field,
-                    _parse_check_op(rule_obj, _optional_string(rule_obj, "reason")),
+                    _parse_check_op(rule_obj, rule_obj.get("reason")),
                     affects_fair=True,
                 )
             ]
@@ -254,25 +239,16 @@ def _parse_validators(validators: Mapping[str, Any], field_names: set[str]) -> l
     rules: list[object] = []
     for field_name, spec in validators.items():
         field = _known_field(field_name, field_names)
-        if not isinstance(spec, Mapping):
-            raise UmpireSchemaError(f'Validator for "{field}" must be a dictionary')
-        reason = _optional_string(spec, "error")
         rules.append(
-            CheckRule(field, _parse_check_op(spec, reason), affects_fair=False, validation=True)
+            CheckRule(
+                field, _parse_check_op(spec, spec.get("error")), affects_fair=False, validation=True
+            )
         )
     return rules
 
 
 def _condition_types(conditions: Mapping[str, Any]) -> dict[str, str]:
-    types: dict[str, str] = {}
-    for name, definition in conditions.items():
-        if not isinstance(definition, Mapping):
-            raise UmpireSchemaError(f'Condition "{name}" must be a dictionary')
-        condition_type = definition.get("type")
-        if not isinstance(condition_type, str):
-            raise UmpireSchemaError(f'Condition "{name}" must include a string type')
-        types[name] = condition_type
-    return types
+    return {name: definition["type"] for name, definition in conditions.items()}
 
 
 def _parse_check_op(rule_obj: Mapping[str, Any], reason: str | None) -> Any:
@@ -340,19 +316,12 @@ def _string(obj: Mapping[str, Any], key: str) -> str:
     return value
 
 
-def _optional_string(obj: Mapping[str, Any], key: str) -> str | None:
-    value = obj.get(key)
-    if value is None:
-        return None
-    if not isinstance(value, str):
-        raise UmpireSchemaError(f'"{key}" must be a string')
-    return value
-
-
 def _number(obj: Mapping[str, Any], key: str) -> int | float:
     value = obj.get(key)
     if not isinstance(value, (int, float)) or isinstance(value, bool):
         raise UmpireSchemaError(f'"{key}" must be a number')
+    if isinstance(value, float) and not math.isfinite(value):
+        raise UmpireSchemaError(f'"{key}" must be a finite number')
     return value
 
 

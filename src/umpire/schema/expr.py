@@ -5,6 +5,7 @@ from typing import Any, cast
 
 from ..checks import check_ops
 from ..types import Conditions, Values
+from .validate import _ARRAY_CONDITION_TYPES
 
 Predicate = Callable[[Values, Conditions], bool]
 
@@ -55,7 +56,7 @@ class ExpressionCompiler:
         self._assert_field(field_name)
         self._assert_condition(condition_name)
         condition_type = self._condition_types.get(condition_name)
-        if condition_type is not None and condition_type not in {"string[]", "number[]"}:
+        if condition_type is not None and condition_type not in _ARRAY_CONDITION_TYPES:
             raise ValueError(
                 f'"fieldInCond" requires an array condition, '
                 f'but "{condition_name}" is "{condition_type}"'

@@ -363,8 +363,8 @@ Implementation notes for R2-R4:
 Implementation notes for R5:
 
 - Preserve Python public names even when parsing JSON names from `@umpire/json`.
-  For example, accept JSON `default`/`defaultValue` only at the schema boundary
-  and expose `default_value` in Python.
+  For example, accept JSON `default` only at the schema boundary and expose
+  `default_value` in Python.
 - Validate `version == 1`.
 - Validate that all rule and expression field references exist.
 - Validate known expression ops and check ops.

@@ -168,9 +168,10 @@ schema = UmpireSchema.from_json_obj(
 u = umpire(schema.fields, schema.rules)
 ```
 
-Schema loading validates version, field references, expression ops, and check
-ops. Unsupported serialized rules can be preserved in `schema.excluded` with
-human-readable `schema.warnings`.
+Schema loading rejects undeclared members in every object and validates the
+version, field references, expression ops, and check ops. Unsupported serialized
+rules can be preserved in `schema.excluded` with human-readable
+`schema.warnings`.
 
 ## Async Conditions
 
