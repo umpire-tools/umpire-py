@@ -131,6 +131,14 @@ def test_compile_expr_contains_rejects_missing_value() -> None:
         compiler.compile_expr({"op": "contains", "field": "tags"})
 
 
+def test_compile_expr_rejects_a_non_finite_value() -> None:
+    """NaN is not a JSON value, so no compilable expression can carry it."""
+    compiler = ExpressionCompiler(field_names={"tags"})
+
+    with pytest.raises(ValueError, match="JSON primitive"):
+        compiler.compile_expr({"op": "contains", "field": "tags", "value": float("nan")})
+
+
 _MEMBERSHIP_CASES: dict[str, tuple[dict[str, object], dict[str, object], bool]] = {
     "contains-boolean-is-not-one": (
         {"op": "contains", "field": "f", "value": True},

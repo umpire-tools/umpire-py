@@ -355,7 +355,10 @@ def _assert_known_members(value: Mapping[str, Any], allowed: Sequence[str], cont
 
 
 def _is_json_primitive(value: Any) -> bool:
-    return value is None or isinstance(value, (str, int, float, bool))
+    """Return whether a value is a JSON primitive, which excludes non-finite floats."""
+    if isinstance(value, float):
+        return math.isfinite(value)
+    return value is None or isinstance(value, (str, int, bool))
 
 
 def _assert_string(value: Any, context: str) -> None:

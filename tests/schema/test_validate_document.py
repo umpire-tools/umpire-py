@@ -170,6 +170,10 @@ _CASES: dict[str, dict[str, object]] = {
         fields={"tags": {"isEmpty": ["array"]}, "discount": {}},
         rules=[_enabled_when({"op": "contains", "field": "tags", "value": "a"})],
     ),
+    "contains-with-nan-value": _document(
+        fields={"tags": {"isEmpty": "array"}, "discount": {}},
+        rules=[_enabled_when({"op": "contains", "field": "tags", "value": float("nan")})],
+    ),
     "in-on-array-field-inside-not-inside-either-of-branch": _document(
         fields={"tags": {"isEmpty": "array"}, "discount": {}},
         rules=[
