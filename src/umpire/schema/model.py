@@ -17,11 +17,11 @@ from ..rules import (
     requires,
 )
 from ..types import FieldDef, IsEmptyStrategy
+from .errors import UmpireSchemaError
 from .expr import ExpressionCompiler
+from .validate import validate_document
 
-
-class UmpireSchemaError(Exception):
-    """Exception raised for Umpire schema errors."""
+__all__ = ["UmpireSchema", "UmpireSchemaError"]
 
 
 @dataclass
@@ -41,11 +41,10 @@ class UmpireSchema:
         if not isinstance(dict_obj, Mapping):
             raise UmpireSchemaError("Schema must be a dictionary")
 
-        version = dict_obj.get("version")
-        if version != 1:
-            raise UmpireSchemaError("Only version 1 schemas are supported")
+        validate_document(dict_obj)
 
-        fields = _parse_fields(_mapping(dict_obj, "fields", default={}))
+        version = dict_obj["version"]
+        fields = _parse_fields(_mapping(dict_obj, "fields"))
         conditions = dict(_mapping(dict_obj, "conditions", default={}))
         condition_types = _condition_types(conditions)
         compiler = ExpressionCompiler(
@@ -101,7 +100,7 @@ def _parse_fields(fields_dict: Mapping[str, Any]) -> dict[str, FieldDef]:
         if not isinstance(required, bool):
             raise UmpireSchemaError(f"Field '{field_name}' required must be a boolean")
 
-        default_value = field_def_dict.get("default", field_def_dict.get("defaultValue"))
+        default_value = field_def_dict.get("default")
         is_empty_str = field_def_dict.get("isEmpty", "present")
 
         try:

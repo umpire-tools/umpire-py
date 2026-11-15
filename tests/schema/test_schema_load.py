@@ -46,7 +46,7 @@ def test_schema_from_json_obj_invalid_version() -> None:
     """Test creating schema with invalid version."""
     json_obj = {"version": 2, "fields": {}}
 
-    with pytest.raises(UmpireSchemaError, match="Only version 1 schemas are supported"):
+    with pytest.raises(UmpireSchemaError, match='Unsupported schema version "2"'):
         UmpireSchema.from_json_obj(json_obj)
 
 
