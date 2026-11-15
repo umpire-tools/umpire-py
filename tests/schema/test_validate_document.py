@@ -100,6 +100,22 @@ _CASES: dict[str, dict[str, object]] = {
             }
         ]
     ),
+    "unknown-top-level-key": _document(rulez=[]),
+    "condition-def-not-a-dictionary": _document(conditions={"isAdmin": ["boolean"]}),
+    "unknown-member-in-condition-definition": _document(
+        conditions={"isAdmin": {"type": "boolean", "surprise": True}}
+    ),
+    "unsupported-condition-type": _document(conditions={"isAdmin": {"type": "array"}}),
+    "any-of-without-rules": _document(rules=[{"type": "anyOf", "rules": []}]),
+    "either-of-without-branches": _document(
+        rules=[{"type": "eitherOf", "group": "auth", "branches": {}}]
+    ),
+    "either-of-with-empty-branch": _document(
+        rules=[{"type": "eitherOf", "group": "auth", "branches": {"a": []}}]
+    ),
+    "validator-for-unknown-field": _document(validators={"nickname": {"op": "email"}}),
+    "validator-not-a-dictionary": _document(validators={"email": "email"}),
+    "validator-with-non-string-error": _document(validators={"email": {"op": "email", "error": 5}}),
     "boolean-version": _document(version=True),
     "default-value-member-on-field": _document(fields={"email": {"defaultValue": "x"}}),
     "missing-fields": {"version": 1, "rules": []},
