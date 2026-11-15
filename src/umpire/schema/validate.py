@@ -22,7 +22,12 @@ _CONDITION_TYPES = frozenset({"boolean", "string", "number", "string[]", "number
 # accepts exactly the array-shaped condition types.
 _ARRAY_CONDITION_TYPES = frozenset(t for t in _CONDITION_TYPES if t.endswith("[]"))
 _IS_EMPTY_STRATEGIES = frozenset(strategy.value for strategy in IsEmptyStrategy)
-_NON_ARRAY_IS_EMPTY = frozenset({"string", "number", "boolean", "object"})
+# Every strategy but `array` and `present` declares a field that cannot hold a list.
+_NON_ARRAY_IS_EMPTY = frozenset(
+    strategy.value
+    for strategy in IsEmptyStrategy
+    if strategy not in (IsEmptyStrategy.ARRAY, IsEmptyStrategy.PRESENT)
+)
 _RULE_TYPES = (
     "requires",
     "enabledWhen",
@@ -388,7 +393,7 @@ def _assert_primitive_array(value: Any, context: str) -> None:
 def _assert_scalar_field(op: str, field_name: Any, fields: Mapping[str, Any]) -> None:
     """Reject a list-valued field where the op compares one scalar."""
     definition = fields.get(field_name)
-    if isinstance(definition, Mapping) and definition.get("isEmpty") == "array":
+    if isinstance(definition, Mapping) and definition.get("isEmpty") == IsEmptyStrategy.ARRAY.value:
         raise UmpireSchemaError(f'"{op}" requires a scalar field')
 
 
