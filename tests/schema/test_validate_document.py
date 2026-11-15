@@ -106,6 +106,9 @@ _CASES: dict[str, dict[str, object]] = {
         conditions={"isAdmin": {"type": "boolean", "surprise": True}}
     ),
     "unsupported-condition-type": _document(conditions={"isAdmin": {"type": "array"}}),
+    "condition-description-not-a-string": _document(
+        conditions={"isAdmin": {"type": "boolean", "description": 5}}
+    ),
     "any-of-without-rules": _document(rules=[{"type": "anyOf", "rules": []}]),
     "one-of-without-branches": _document(
         rules=[{"type": "oneOf", "group": "auth", "branches": {}}]
@@ -132,6 +135,12 @@ _CASES: dict[str, dict[str, object]] = {
         rules=[_enabled_when({"op": "and", "exprs": "not-an-array"})]
     ),
     "eq-without-value": _document(rules=[_enabled_when({"op": "eq", "field": "email"})]),
+    "eq-with-object-value": _document(
+        rules=[_enabled_when({"op": "eq", "field": "email", "value": {"a": 1}})]
+    ),
+    "cond-eq-with-object-value": _document(
+        rules=[_enabled_when({"op": "condEq", "condition": "isAdmin", "value": {"a": 1}})]
+    ),
     "in-with-object-values": _document(
         rules=[_enabled_when({"op": "in", "field": "email", "values": [{"a": 1}]})],
     ),
