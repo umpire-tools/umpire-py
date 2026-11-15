@@ -162,10 +162,6 @@ _CASES: dict[str, dict[str, object]] = {
     "contains-with-array-value": _document(
         rules=[_enabled_when({"op": "contains", "field": "tags", "value": ["a"]})]
     ),
-    "contains-on-string-field": _document(
-        fields={"tags": {"isEmpty": "string"}, "discount": {}},
-        rules=[_enabled_when({"op": "contains", "field": "tags", "value": "a"})],
-    ),
     "contains-on-field-with-list-is-empty": _document(
         fields={"tags": {"isEmpty": ["array"]}, "discount": {}},
         rules=[_enabled_when({"op": "contains", "field": "tags", "value": "a"})],
@@ -242,6 +238,18 @@ _CASE_MESSAGES: dict[str, str] = {
 def test_rejects_invalid_document(case: str) -> None:
     with pytest.raises(UmpireSchemaError, match=_CASE_MESSAGES.get(case)):
         UmpireSchema.from_json_obj(_CASES[case])
+
+
+@pytest.mark.parametrize("is_empty", ["string", "number", "boolean", "object"])
+def test_contains_rejects_every_non_array_field(is_empty: str) -> None:
+    """contains requires a field that can hold a list, whatever the scalar strategy."""
+    document = _document(
+        fields={"tags": {"isEmpty": is_empty}, "discount": {}},
+        rules=[_enabled_when({"op": "contains", "field": "tags", "value": "a"})],
+    )
+
+    with pytest.raises(UmpireSchemaError, match=re.escape('"contains" requires an array field')):
+        UmpireSchema.from_json_obj(document)
 
 
 @pytest.mark.parametrize(
