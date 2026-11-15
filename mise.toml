@@ -7,6 +7,7 @@ UMPIRE_SPEC_SHA256 = "11d3f3465e91b4033e62e4a5da08845c76726ef05b43662c59b88ae647
 description = "Sync umpire-spec fixtures into spec/ at the pinned tag"
 sources = ["mise.toml"]
 outputs = ["spec/.synced-at-version"]
+shell = "bash -c"
 run = """
 set -euo pipefail
 tarball=$(mktemp -t umpire-spec-XXXXXX.tar.gz)
