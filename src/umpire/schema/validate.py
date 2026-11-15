@@ -231,8 +231,6 @@ def _validate_expression(expression: Any) -> None:
     _assert_known_members(expression, members, "Expression")
     _assert_members_present(expression, members[1:], f'Expression "{op}"')
 
-    # A future `contains` op joins eq/neq: same members, same
-    # "value must be a JSON primitive" check.
     if op in ("eq", "neq"):
         _assert_string(expression["field"], f'Expression "{op}" field')
         _assert_primitive(expression["value"], f'Expression "{op}" value')
