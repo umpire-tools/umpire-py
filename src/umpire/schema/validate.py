@@ -155,6 +155,10 @@ def _validate_rule(rule: Any) -> None:
         return
 
     if rule_type == "oneOf":
+        group = rule.get("group")
+        branches = _mapping(rule.get("branches"), 'Rule "oneOf" branches must be a dictionary')
+        if not branches:
+            raise UmpireSchemaError(f'oneOf("{group}") must include at least one branch')
         return
 
     if rule_type == "anyOf":

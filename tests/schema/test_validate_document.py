@@ -107,6 +107,9 @@ _CASES: dict[str, dict[str, object]] = {
     ),
     "unsupported-condition-type": _document(conditions={"isAdmin": {"type": "array"}}),
     "any-of-without-rules": _document(rules=[{"type": "anyOf", "rules": []}]),
+    "one-of-without-branches": _document(
+        rules=[{"type": "oneOf", "group": "auth", "branches": {}}]
+    ),
     "either-of-without-branches": _document(
         rules=[{"type": "eitherOf", "group": "auth", "branches": {}}]
     ),
