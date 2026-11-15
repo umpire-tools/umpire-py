@@ -12,8 +12,8 @@ from .conformance_fixtures import resolve_conformance_dir
 
 
 @pytest.fixture(scope="session")
-def conformance_dir(pytestconfig: pytest.Config) -> Path:
-    return resolve_conformance_dir(pytestconfig)
+def conformance_dir() -> Path:
+    return resolve_conformance_dir()
 
 
 @pytest.fixture(scope="session")

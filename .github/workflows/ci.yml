@@ -36,7 +36,18 @@ jobs:
       - name: Mypy
         run: uv run mypy src
 
+      - uses: jdx/mise-action@v2
+        with:
+          install: false
+
+      - name: Sync pinned spec fixtures
+        env:
+          MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}
+        run: mise run spec-sync
+
       - name: Pytest
+        env:
+          UMPIRE_JSON_CONFORMANCE_DIR: spec/conformance
         run: uv run pytest --cov=umpire --cov-report=term-missing
 
       - name: Build distribution
