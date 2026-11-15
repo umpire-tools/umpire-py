@@ -123,6 +123,21 @@ _CASES: dict[str, dict[str, object]] = {
     "validator-not-a-dictionary": _document(validators={"email": "email"}),
     "validator-with-non-string-error": _document(validators={"email": {"op": "email", "error": 5}}),
     "boolean-version": _document(version=True),
+    "string-version": _document(version="1"),
+    "fields-not-a-dictionary": _document(fields=["email"]),
+    "conditions-not-a-dictionary": _document(conditions=["isAdmin"]),
+    "validators-not-a-dictionary": _document(validators=["email"]),
+    "rule-not-a-dictionary": _document(rules=[5]),
+    "unknown-member-in-nested-check-spec": _document(
+        rules=[
+            _enabled_when(
+                {"op": "check", "field": "email", "check": {"op": "email", "surprise": True}}
+            )
+        ]
+    ),
+    "unknown-member-in-validator": _document(
+        validators={"email": {"op": "email", "surprise": True}}
+    ),
     "default-value-member-on-field": _document(fields={"email": {"defaultValue": "x"}}),
     "missing-fields": {"version": 1, "rules": []},
     "empty-fields": {"version": 1, "fields": {}, "rules": []},
