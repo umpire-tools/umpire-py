@@ -132,6 +132,27 @@ _CASES: dict[str, dict[str, object]] = {
     "in-with-object-values": _document(
         rules=[_enabled_when({"op": "in", "field": "email", "values": [{"a": 1}]})],
     ),
+    "missing-version": {"fields": {"email": {}}, "rules": []},
+    "excluded-entry-not-a-dictionary": _document(excluded=["custom"]),
+    "excluded-entry-without-type": _document(
+        excluded=[{"description": "Custom callback cannot be serialized"}]
+    ),
+    "excluded-entry-with-empty-type": _document(
+        excluded=[{"type": "", "description": "Custom callback cannot be serialized"}]
+    ),
+    "excluded-entry-without-description": _document(excluded=[{"type": "custom"}]),
+    "excluded-entry-with-empty-description": _document(
+        excluded=[{"type": "custom", "description": ""}]
+    ),
+    "excluded-entry-with-non-string-field": _document(
+        excluded=[{"type": "custom", "description": "Custom", "field": 5}]
+    ),
+    "excluded-entry-with-non-string-key": _document(
+        excluded=[{"type": "custom", "description": "Custom", "key": 5}]
+    ),
+    "excluded-entry-with-non-string-signature": _document(
+        excluded=[{"type": "custom", "description": "Custom", "signature": 5}]
+    ),
 }
 
 
