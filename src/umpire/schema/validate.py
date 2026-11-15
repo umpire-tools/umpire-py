@@ -10,7 +10,7 @@ import math
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from ..types import IsEmptyStrategy
+from ..types import IsEmptyStrategy, is_json_primitive
 from .errors import UmpireSchemaError
 
 _SCHEMA_MEMBERS = ("version", "conditions", "fields", "rules", "validators", "excluded")
@@ -124,7 +124,7 @@ def _validate_field_def(field_name: Any, definition: Any) -> None:
 
     _assert_known_members(definition, _FIELD_DEF_MEMBERS, "field definition")
 
-    if "default" in definition and not _is_json_primitive(definition["default"]):
+    if "default" in definition and not is_json_primitive(definition["default"]):
         raise UmpireSchemaError(f'Field "{field_name}" default must be a JSON primitive')
 
     is_empty = definition.get("isEmpty")
@@ -359,13 +359,6 @@ def _assert_known_members(value: Mapping[str, Any], allowed: Sequence[str], cont
             )
 
 
-def _is_json_primitive(value: Any) -> bool:
-    """Return whether a value is a JSON primitive, which excludes non-finite floats."""
-    if isinstance(value, float):
-        return math.isfinite(value)
-    return value is None or isinstance(value, (str, int, bool))
-
-
 def _assert_string(value: Any, context: str) -> None:
     if not isinstance(value, str):
         raise UmpireSchemaError(f"{context} must be a string")
@@ -379,14 +372,14 @@ def _assert_number(value: Any, context: str) -> None:
 
 
 def _assert_primitive(value: Any, context: str) -> None:
-    if not _is_json_primitive(value):
+    if not is_json_primitive(value):
         raise UmpireSchemaError(f"{context} must be a JSON primitive")
 
 
 def _assert_primitive_array(value: Any, context: str) -> None:
     message = f"{context} must be an array of JSON primitives"
     entries = _sequence(value, message)
-    if not all(_is_json_primitive(entry) for entry in entries):
+    if not all(is_json_primitive(entry) for entry in entries):
         raise UmpireSchemaError(message)
 
 

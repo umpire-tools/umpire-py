@@ -4,8 +4,8 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from typing import Any, cast
 
 from ..checks import check_ops
-from ..types import Conditions, Values
-from .validate import _ARRAY_CONDITION_TYPES, _is_json_primitive
+from ..types import Conditions, Values, is_json_primitive
+from .validate import _ARRAY_CONDITION_TYPES
 
 Predicate = Callable[[Values, Conditions], bool]
 
@@ -265,7 +265,7 @@ def _string(expression: Mapping[str, Any], key: str) -> str:
 
 
 def _primitive(expression: Mapping[str, Any], key: str) -> Any:
-    if key not in expression or not _is_json_primitive(expression[key]):
+    if key not in expression or not is_json_primitive(expression[key]):
         raise ValueError(f'Expression "{key}" must be a JSON primitive')
     return expression[key]
 

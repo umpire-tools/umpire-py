@@ -1,5 +1,6 @@
 """Core type definitions for Umpire."""
 
+import math
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from enum import Enum
@@ -144,3 +145,10 @@ class Scorecard:
     fouled_fields: tuple[str, ...]
     directly_fouled_fields: tuple[str, ...]
     cascading_fields: tuple[str, ...]
+
+
+def is_json_primitive(value: Any) -> bool:
+    """Return whether a value is a JSON primitive, which excludes non-finite floats."""
+    if isinstance(value, float):
+        return math.isfinite(value)
+    return value is None or isinstance(value, (str, int, bool))
