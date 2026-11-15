@@ -6,6 +6,7 @@ rejects undeclared members and the shape errors the meta-schema enforces before
 the parser turns the document into Python objects.
 """
 
+import math
 from collections.abc import Mapping, Sequence
 from typing import Any
 
@@ -66,7 +67,9 @@ def validate_document(document: Mapping[str, Any]) -> None:
         raise UmpireSchemaError("Schema must include at least one field")
 
     conditions = _mapping(document.get("conditions", {}), '"conditions" must be a dictionary')
-    rules = _sequence(document.get("rules", ()), '"rules" must be an array')
+    if "rules" not in document:
+        raise UmpireSchemaError('Schema must include a "rules" array')
+    rules = _sequence(document.get("rules"), '"rules" must be an array')
     validators = _mapping(document.get("validators", {}), '"validators" must be a dictionary')
     excluded = _sequence(document.get("excluded", ()), '"excluded" must be an array')
 
@@ -124,6 +127,10 @@ def _validate_rule(rule: Any) -> None:
         raise UmpireSchemaError(f"unknown rule type: {rule_type}")
 
     _assert_known_members(rule, _rule_members(rule), "Rule")
+
+    reason = rule.get("reason")
+    if "reason" in rule and not isinstance(reason, str):
+        raise UmpireSchemaError('Rule "reason" must be a string when provided')
 
     if rule_type == "requires":
         if "dependency" in rule:
@@ -203,7 +210,10 @@ def _rule_members(rule: Mapping[str, Any]) -> tuple[str, ...]:
     if rule_type == "anyOf":
         return ("type", "rules")
 
-    return ("type", "field", "reason", *_validator_spec_members(rule.get("op")))
+    if rule_type == "check":
+        return ("type", "field", "reason", *_validator_spec_members(rule.get("op")))
+
+    raise UmpireSchemaError(f"unknown rule type: {rule_type}")
 
 
 def _validate_expression(expression: Any) -> None:
@@ -219,14 +229,40 @@ def _validate_expression(expression: Any) -> None:
         raise UmpireSchemaError(f"unknown expression op: {op}")
 
     _assert_known_members(expression, members, "Expression")
+    _assert_members_present(expression, members[1:], f'Expression "{op}"')
 
-    if op in ("and", "or"):
-        for entry in _sequence(expression.get("exprs"), 'Expression "exprs" must be an array'):
+    # A future `contains` op joins eq/neq: same members, same
+    # "value must be a JSON primitive" check.
+    if op in ("eq", "neq"):
+        _assert_string(expression["field"], f'Expression "{op}" field')
+        _assert_primitive(expression["value"], f'Expression "{op}" value')
+    elif op in ("gt", "gte", "lt", "lte"):
+        _assert_string(expression["field"], f'Expression "{op}" field')
+        _assert_number(expression["value"], f'Expression "{op}" value')
+    elif op in ("present", "absent", "truthy", "falsy"):
+        _assert_string(expression["field"], f'Expression "{op}" field')
+    elif op in ("in", "notIn"):
+        _assert_string(expression["field"], f'Expression "{op}" field')
+        _assert_primitive_array(expression["values"], f'Expression "{op}" values')
+    elif op == "cond":
+        _assert_string(expression["condition"], 'Expression "cond" condition')
+    elif op == "condEq":
+        _assert_string(expression["condition"], 'Expression "condEq" condition')
+        _assert_primitive(expression["value"], 'Expression "condEq" value')
+    elif op == "condIn":
+        _assert_string(expression["condition"], 'Expression "condIn" condition')
+        _assert_primitive_array(expression["values"], 'Expression "condIn" values')
+    elif op == "fieldInCond":
+        _assert_string(expression["field"], 'Expression "fieldInCond" field')
+        _assert_string(expression["condition"], 'Expression "fieldInCond" condition')
+    elif op in ("and", "or"):
+        for entry in _sequence(expression["exprs"], f'Expression "{op}" exprs must be an array'):
             _validate_expression(entry)
     elif op == "not":
-        _validate_expression(expression.get("expr"))
+        _validate_expression(expression["expr"])
     elif op == "check":
-        _validate_validator_spec(expression.get("check"))
+        _assert_string(expression["field"], 'Expression "check" field')
+        _validate_validator_spec(expression["check"])
 
 
 def _validate_validator_spec(spec: Any, additional_members: Sequence[str] = ()) -> None:
@@ -272,6 +308,10 @@ def _validate_excluded_rule(rule: Any) -> None:
     if not isinstance(description, str) or not description:
         raise UmpireSchemaError("Excluded rules must include a non-empty string description")
 
+    for member in ("field", "key", "signature"):
+        if member in rule and not isinstance(rule[member], str):
+            raise UmpireSchemaError(f'Excluded rule "{member}" must be a string when provided')
+
 
 def _validator_spec_members(op: Any) -> tuple[str, ...]:
     if op in ("email", "url", "integer"):
@@ -295,6 +335,36 @@ def _assert_known_members(value: Mapping[str, Any], allowed: Sequence[str], cont
 
 def _is_json_primitive(value: Any) -> bool:
     return value is None or isinstance(value, (str, int, float, bool))
+
+
+def _assert_string(value: Any, context: str) -> None:
+    if not isinstance(value, str):
+        raise UmpireSchemaError(f"{context} must be a string")
+
+
+def _assert_number(value: Any, context: str) -> None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise UmpireSchemaError(f"{context} must be a finite number")
+    if not math.isfinite(value):
+        raise UmpireSchemaError(f"{context} must be a finite number")
+
+
+def _assert_primitive(value: Any, context: str) -> None:
+    if not _is_json_primitive(value):
+        raise UmpireSchemaError(f"{context} must be a JSON primitive")
+
+
+def _assert_primitive_array(value: Any, context: str) -> None:
+    message = f"{context} must be an array of JSON primitives"
+    entries = _sequence(value, message)
+    if not all(_is_json_primitive(entry) for entry in entries):
+        raise UmpireSchemaError(message)
+
+
+def _assert_members_present(value: Mapping[str, Any], members: Sequence[str], context: str) -> None:
+    for member in members:
+        if member not in value:
+            raise UmpireSchemaError(f'{context} must include a "{member}" member')
 
 
 def _mapping(value: Any, message: str) -> Mapping[str, Any]:

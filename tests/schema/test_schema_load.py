@@ -18,6 +18,7 @@ def test_schema_from_json_obj_valid() -> None:
             "email": {"required": True, "isEmpty": "string"},
             "company_name": {"required": False, "isEmpty": "string"},
         },
+        "rules": [],
     }
 
     schema = UmpireSchema.from_json_obj(json_obj)
@@ -52,7 +53,11 @@ def test_schema_from_json_obj_invalid_version() -> None:
 
 def test_schema_from_json_obj_invalid_field_def() -> None:
     """Test creating schema with invalid field definition."""
-    json_obj = {"version": 1, "fields": {"email": "not a dict"}}
+    json_obj = {
+        "version": 1,
+        "fields": {"email": "not a dict"},
+        "rules": [],
+    }
 
     with pytest.raises(
         UmpireSchemaError, match="Field definition for 'email' must be a dictionary"
@@ -65,6 +70,7 @@ def test_schema_from_json_obj_invalid_is_empty() -> None:
     json_obj = {
         "version": 1,
         "fields": {"email": {"required": True, "isEmpty": "invalid_strategy"}},
+        "rules": [],
     }
 
     with pytest.raises(UmpireSchemaError, match="Invalid isEmpty strategy"):
@@ -81,7 +87,8 @@ def test_schema_from_json_str_valid() -> None:
                 "required": true,
                 "isEmpty": "string"
             }
-        }
+        },
+        "rules": []
     }
     """
 
