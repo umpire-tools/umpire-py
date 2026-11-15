@@ -1,5 +1,7 @@
 """Documents the closed v1 walk must reject, whatever the error message."""
 
+import re
+
 import pytest
 
 from umpire import UmpireSchema, UmpireSchemaError
@@ -192,6 +194,7 @@ _CASES: dict[str, dict[str, object]] = {
         rules=[_enabled_when({"op": "in", "field": "tags", "values": ["a"]})],
     ),
     "field-in-cond-on-array-field": _document(
+        conditions={"isAdmin": {"type": "string[]"}},
         fields={"tags": {"isEmpty": "array"}, "discount": {}},
         rules=[_enabled_when({"op": "fieldInCond", "field": "tags", "condition": "isAdmin"})],
     ),
@@ -225,10 +228,16 @@ _CASES: dict[str, dict[str, object]] = {
 }
 
 
-@pytest.mark.parametrize("document", list(_CASES.values()), ids=list(_CASES))
-def test_rejects_invalid_document(document: dict[str, object]) -> None:
-    with pytest.raises(UmpireSchemaError):
-        UmpireSchema.from_json_obj(document)
+# Cases pinned to the check that must reject them, so they cannot pass by accident.
+_CASE_MESSAGES: dict[str, str] = {
+    "field-in-cond-on-array-field": re.escape('"fieldInCond" requires a scalar field'),
+}
+
+
+@pytest.mark.parametrize("case", list(_CASES))
+def test_rejects_invalid_document(case: str) -> None:
+    with pytest.raises(UmpireSchemaError, match=_CASE_MESSAGES.get(case)):
+        UmpireSchema.from_json_obj(_CASES[case])
 
 
 @pytest.mark.parametrize(
