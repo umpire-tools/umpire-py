@@ -1,7 +1,7 @@
 [env]
 UMPIRE_JSON_CONFORMANCE_DIR = "spec/conformance"
-UMPIRE_SPEC_VERSION = "v1.0.0"
-UMPIRE_SPEC_SHA256 = "71e7d71391e90eefe4c46c1266fbd7d57ba39f5ef72360f9a8b1c593f576fed3"
+UMPIRE_SPEC_VERSION = "v1.1.0"
+UMPIRE_SPEC_SHA256 = "11d3f3465e91b4033e62e4a5da08845c76726ef05b43662c59b88ae647d55aa4"
 
 [tasks.spec-sync]
 description = "Sync umpire-spec fixtures into spec/ at the pinned tag"
