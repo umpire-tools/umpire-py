@@ -113,7 +113,7 @@ def _validate_field_def(field_name: Any, definition: Any) -> None:
     _assert_known_members(definition, _FIELD_DEF_MEMBERS, "field definition")
 
     if "default" in definition and not _is_json_primitive(definition["default"]):
-        raise UmpireSchemaError(f'Field "{field_name}" has a non-serializable default value')
+        raise UmpireSchemaError(f'Field "{field_name}" default must be a JSON primitive')
 
 
 def _validate_rule(rule: Any) -> None:
