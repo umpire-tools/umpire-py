@@ -20,6 +20,7 @@ _CONDITION_TYPES = frozenset({"boolean", "string", "number", "string[]", "number
 # ``fieldInCond`` tests a field scalar against a runtime condition array, so it
 # accepts exactly the array-shaped condition types.
 _ARRAY_CONDITION_TYPES = frozenset(t for t in _CONDITION_TYPES if t.endswith("[]"))
+_NON_ARRAY_IS_EMPTY = frozenset({"string", "number", "boolean", "object"})
 _RULE_TYPES = (
     "requires",
     "enabledWhen",
@@ -44,6 +45,7 @@ _EXPRESSION_MEMBERS: dict[str, tuple[str, ...]] = {
     "falsy": ("op", "field"),
     "in": ("op", "field", "values"),
     "notIn": ("op", "field", "values"),
+    "contains": ("op", "field", "value"),
     "cond": ("op", "condition"),
     "condEq": ("op", "condition", "value"),
     "condIn": ("op", "condition", "values"),
@@ -83,7 +85,7 @@ def validate_document(document: Mapping[str, Any]) -> None:
         _validate_field_def(field_name, definition)
 
     for rule in rules:
-        _validate_rule(rule)
+        _validate_rule(rule, fields)
 
     for field_name, validator in validators.items():
         _validate_validator(field_name, validator, fields)
@@ -119,7 +121,7 @@ def _validate_field_def(field_name: Any, definition: Any) -> None:
         raise UmpireSchemaError(f'Field "{field_name}" default must be a JSON primitive')
 
 
-def _validate_rule(rule: Any) -> None:
+def _validate_rule(rule: Any, fields: Mapping[str, Any]) -> None:
     if not isinstance(rule, Mapping):
         raise UmpireSchemaError("Rule must be a dictionary")
 
@@ -143,18 +145,18 @@ def _validate_rule(rule: Any) -> None:
                 rule.get("dependencies"), 'Rule "requires" dependencies must be an array'
             ):
                 if isinstance(dependency, Mapping):
-                    _validate_expression(dependency)
+                    _validate_expression(dependency, fields)
             return
-        _validate_expression(rule.get("when"))
+        _validate_expression(rule.get("when"), fields)
         return
 
     if rule_type in ("enabledWhen", "fairWhen"):
-        _validate_expression(rule.get("when"))
+        _validate_expression(rule.get("when"), fields)
         return
 
     if rule_type == "disables":
         if "source" not in rule:
-            _validate_expression(rule.get("when"))
+            _validate_expression(rule.get("when"), fields)
         return
 
     if rule_type == "oneOf":
@@ -169,7 +171,7 @@ def _validate_rule(rule: Any) -> None:
         if not inner_rules:
             raise UmpireSchemaError("anyOf() requires at least one rule")
         for inner_rule in inner_rules:
-            _validate_rule(inner_rule)
+            _validate_rule(inner_rule, fields)
         return
 
     if rule_type == "eitherOf":
@@ -186,7 +188,7 @@ def _validate_rule(rule: Any) -> None:
                     f'eitherOf("{group}") branch "{branch_name}" must not be empty'
                 )
             for inner_rule in entries:
-                _validate_rule(inner_rule)
+                _validate_rule(inner_rule, fields)
         return
 
     if rule_type == "check":
@@ -223,7 +225,7 @@ def _rule_members(rule: Mapping[str, Any]) -> tuple[str, ...]:
     raise UmpireSchemaError(f"unknown rule type: {rule_type}")
 
 
-def _validate_expression(expression: Any) -> None:
+def _validate_expression(expression: Any, fields: Mapping[str, Any]) -> None:
     if not isinstance(expression, Mapping):
         raise UmpireSchemaError("Expression must be a dictionary")
 
@@ -238,9 +240,13 @@ def _validate_expression(expression: Any) -> None:
     _assert_known_members(expression, members, "Expression")
     _assert_members_present(expression, members[1:], f'Expression "{op}"')
 
-    if op in ("eq", "neq"):
+    # `contains` shares eq's shape: one primitive `value`, where an explicit
+    # null is valid and a missing key is a schema error.
+    if op in ("eq", "neq", "contains"):
         _assert_string(expression["field"], f'Expression "{op}" field')
         _assert_primitive(expression["value"], f'Expression "{op}" value')
+        if op == "contains":
+            _assert_array_field(expression["field"], fields)
     elif op in ("gt", "gte", "lt", "lte"):
         _assert_string(expression["field"], f'Expression "{op}" field')
         _assert_number(expression["value"], f'Expression "{op}" value')
@@ -249,6 +255,7 @@ def _validate_expression(expression: Any) -> None:
     elif op in ("in", "notIn"):
         _assert_string(expression["field"], f'Expression "{op}" field')
         _assert_primitive_array(expression["values"], f'Expression "{op}" values')
+        _assert_scalar_field(op, expression["field"], fields)
     elif op == "cond":
         _assert_string(expression["condition"], 'Expression "cond" condition')
     elif op == "condEq":
@@ -260,11 +267,12 @@ def _validate_expression(expression: Any) -> None:
     elif op == "fieldInCond":
         _assert_string(expression["field"], 'Expression "fieldInCond" field')
         _assert_string(expression["condition"], 'Expression "fieldInCond" condition')
+        _assert_scalar_field(op, expression["field"], fields)
     elif op in ("and", "or"):
         for entry in _sequence(expression["exprs"], f'Expression "{op}" exprs must be an array'):
-            _validate_expression(entry)
+            _validate_expression(entry, fields)
     elif op == "not":
-        _validate_expression(expression["expr"])
+        _validate_expression(expression["expr"], fields)
     elif op == "check":
         _assert_string(expression["field"], 'Expression "check" field')
         _validate_validator_spec(expression["check"])
@@ -364,6 +372,24 @@ def _assert_primitive_array(value: Any, context: str) -> None:
     entries = _sequence(value, message)
     if not all(_is_json_primitive(entry) for entry in entries):
         raise UmpireSchemaError(message)
+
+
+def _assert_scalar_field(op: str, field_name: Any, fields: Mapping[str, Any]) -> None:
+    """Reject a list-valued field where the op compares one scalar."""
+    definition = fields.get(field_name)
+    if isinstance(definition, Mapping) and definition.get("isEmpty") == "array":
+        raise UmpireSchemaError(f'"{op}" requires a scalar field')
+
+
+def _assert_array_field(field_name: Any, fields: Mapping[str, Any]) -> None:
+    """Reject a field declared to hold something other than a list.
+
+    ``isEmpty`` of ``array``, ``present``, or a field with no ``isEmpty``
+    may hold a list at runtime; string, number, boolean, and object may not.
+    """
+    definition = fields.get(field_name)
+    if isinstance(definition, Mapping) and definition.get("isEmpty") in _NON_ARRAY_IS_EMPTY:
+        raise UmpireSchemaError('"contains" requires an array field')
 
 
 def _assert_members_present(value: Mapping[str, Any], members: Sequence[str], context: str) -> None:

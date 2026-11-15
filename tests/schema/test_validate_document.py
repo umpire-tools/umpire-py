@@ -156,6 +156,41 @@ _CASES: dict[str, dict[str, object]] = {
     "cond-eq-with-object-value": _document(
         rules=[_enabled_when({"op": "condEq", "condition": "isAdmin", "value": {"a": 1}})]
     ),
+    "contains-without-value": _document(rules=[_enabled_when({"op": "contains", "field": "tags"})]),
+    "contains-with-array-value": _document(
+        rules=[_enabled_when({"op": "contains", "field": "tags", "value": ["a"]})]
+    ),
+    "contains-on-string-field": _document(
+        fields={"tags": {"isEmpty": "string"}, "discount": {}},
+        rules=[_enabled_when({"op": "contains", "field": "tags", "value": "a"})],
+    ),
+    "in-on-array-field-inside-not-inside-either-of-branch": _document(
+        fields={"tags": {"isEmpty": "array"}, "discount": {}},
+        rules=[
+            {
+                "type": "eitherOf",
+                "group": "auth",
+                "branches": {
+                    "a": [
+                        _enabled_when(
+                            {
+                                "op": "not",
+                                "expr": {"op": "in", "field": "tags", "values": ["a"]},
+                            }
+                        )
+                    ]
+                },
+            }
+        ],
+    ),
+    "in-on-array-field": _document(
+        fields={"tags": {"isEmpty": "array"}, "discount": {}},
+        rules=[_enabled_when({"op": "in", "field": "tags", "values": ["a"]})],
+    ),
+    "field-in-cond-on-array-field": _document(
+        fields={"tags": {"isEmpty": "array"}, "discount": {}},
+        rules=[_enabled_when({"op": "fieldInCond", "field": "tags", "condition": "isAdmin"})],
+    ),
     "in-with-object-values": _document(
         rules=[_enabled_when({"op": "in", "field": "email", "values": [{"a": 1}]})],
     ),
@@ -190,3 +225,28 @@ _CASES: dict[str, dict[str, object]] = {
 def test_rejects_invalid_document(document: dict[str, object]) -> None:
     with pytest.raises(UmpireSchemaError):
         UmpireSchema.from_json_obj(document)
+
+
+@pytest.mark.parametrize(
+    ("is_empty", "value"),
+    [
+        ("array", "a"),
+        ("present", "a"),
+        (None, "a"),
+        ("array", None),
+        ("array", 22),
+        ("array", True),
+    ],
+    ids=["array", "present", "no-is-empty", "null-value", "number-value", "boolean-value"],
+)
+def test_contains_accepts_array_capable_fields_and_any_primitive(
+    is_empty: str | None, value: object
+) -> None:
+    """contains may target any field that can hold a list, with any primitive value."""
+    definition: dict[str, object] = {} if is_empty is None else {"isEmpty": is_empty}
+    document = _document(
+        fields={"tags": definition, "discount": {}},
+        rules=[_enabled_when({"op": "contains", "field": "tags", "value": value})],
+    )
+
+    UmpireSchema.from_json_obj(document)
