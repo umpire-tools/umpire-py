@@ -1,24 +1,38 @@
-"""Conformance tests for upstream @umpire/json fixtures."""
+"""Conformance tests for the pinned umpire-spec fixtures."""
 
 import json
-from pathlib import Path
+import re
 from typing import Any
 
 import pytest
 
-from umpire import FieldAvailability, UmpireSchema, umpire
+from umpire import FieldAvailability, UmpireSchema, UmpireSchemaError, umpire
 
 from .conformance_fixtures import resolve_conformance_dir
 
-
-@pytest.fixture(scope="session")
-def conformance_dir() -> Path:
-    return resolve_conformance_dir()
+CONFORMANCE_DIR = resolve_conformance_dir()
 
 
-@pytest.fixture(scope="session")
-def conformance_index(conformance_dir: Path) -> dict[str, Any]:
-    return json.loads((conformance_dir / "index.json").read_text())
+def _index() -> dict[str, Any]:
+    return json.loads((CONFORMANCE_DIR / "index.json").read_text())
+
+
+def _load(entry: dict[str, Any]) -> dict[str, Any]:
+    fixture: dict[str, Any] = json.loads((CONFORMANCE_DIR / entry["path"]).read_text())
+    return fixture
+
+
+def _fixture_params() -> list[pytest.param]:
+    return [pytest.param(entry, id=entry["id"]) for entry in _index()["fixtures"]]
+
+
+def _failure_params() -> list[pytest.param]:
+    params: list[pytest.param] = []
+    for entry in _index()["failures"]:
+        fixture = _load(entry)
+        for failure in fixture["failures"]:
+            params.append(pytest.param(failure, id=f"{fixture['id']}::{failure['id']}"))
+    return params
 
 
 def _availability(status: FieldAvailability) -> dict[str, Any]:
@@ -37,43 +51,36 @@ def _availability(status: FieldAvailability) -> dict[str, Any]:
     return result
 
 
-def test_upstream_json_fixtures(
-    conformance_dir: Path,
-    conformance_index: dict[str, Any],
-) -> None:
+@pytest.mark.parametrize("entry", _fixture_params())
+def test_upstream_json_fixtures(entry: dict[str, Any]) -> None:
     """Python runtime should match portable JSON fixture expectations."""
-    for entry in conformance_index["fixtures"]:
-        fixture = json.loads((conformance_dir / entry["path"]).read_text())
-        schema = UmpireSchema.from_json_obj(fixture["schema"])
-        u = umpire(schema.fields, schema.rules)
+    fixture = _load(entry)
+    schema = UmpireSchema.from_json_obj(fixture["schema"])
+    u = umpire(schema.fields, schema.rules)
 
-        for case in fixture["cases"]:
-            result = u.check(
-                case.get("values", {}),
-                case.get("conditions", {}),
-                previous_values=case.get("prev"),
-            )
+    for case in fixture["cases"]:
+        result = u.check(
+            case.get("values", {}),
+            case.get("conditions", {}),
+            previous_values=case.get("prev"),
+        )
 
-            assert {field: _availability(status) for field, status in result.items()} == case[
-                "expectedAvailability"
-            ], f"{fixture['id']}::{case['id']}"
+        assert {field: _availability(status) for field, status in result.items()} == case[
+            "expectedAvailability"
+        ], f"{fixture['id']}::{case['id']}"
 
 
-def test_upstream_json_failure_fixtures(
-    conformance_dir: Path,
-    conformance_index: dict[str, Any],
-) -> None:
+@pytest.mark.parametrize("failure", _failure_params())
+def test_upstream_json_failure_fixtures(failure: dict[str, Any]) -> None:
     """Python runtime should reject invalid schemas/runtime inputs like upstream."""
-    for entry in conformance_index["failures"]:
-        fixture = json.loads((conformance_dir / entry["path"]).read_text())
+    expected = re.escape(failure["errorIncludes"])
 
-        for failure in fixture["failures"]:
-            if failure["phase"] == "validate":
-                with pytest.raises(Exception, match=failure["errorIncludes"]):
-                    UmpireSchema.from_json_obj(failure["schema"])
-                continue
+    if failure["phase"] == "validate":
+        with pytest.raises(UmpireSchemaError, match=expected):
+            UmpireSchema.from_json_obj(failure["schema"])
+        return
 
-            schema = UmpireSchema.from_json_obj(failure["schema"])
-            u = umpire(schema.fields, schema.rules)
-            with pytest.raises(Exception, match=failure["errorIncludes"]):
-                u.check(failure.get("values", {}), failure.get("conditions", {}))
+    schema = UmpireSchema.from_json_obj(failure["schema"])
+    u = umpire(schema.fields, schema.rules)
+    with pytest.raises(Exception, match=expected):
+        u.check(failure.get("values", {}), failure.get("conditions", {}))
