@@ -45,7 +45,7 @@ class UmpireSchema:
         validate_document(dict_obj)
 
         # Shape is settled above, so parsing enforces only the semantics the walk
-        # does not cover: references, check operands, and isEmpty strategy names.
+        # does not cover: field references and check operands.
         version = dict_obj["version"]
         fields = _parse_fields(dict_obj["fields"])
         conditions: dict[str, Any] = dict(dict_obj.get("conditions", {}))
@@ -101,12 +101,7 @@ def _parse_fields(fields_dict: Mapping[str, Any]) -> dict[str, FieldDef]:
             raise UmpireSchemaError(f"Field '{field_name}' required must be a boolean")
 
         default_value = field_def_dict.get("default")
-        is_empty_str = field_def_dict.get("isEmpty", "present")
-
-        try:
-            is_empty = IsEmptyStrategy(is_empty_str)
-        except ValueError as e:
-            raise UmpireSchemaError(f"Invalid isEmpty strategy: {is_empty_str}") from e
+        is_empty = IsEmptyStrategy(field_def_dict.get("isEmpty", "present"))
 
         fields[field_name] = FieldDef(
             required=required,

@@ -164,6 +164,10 @@ _CASES: dict[str, dict[str, object]] = {
         fields={"tags": {"isEmpty": "string"}, "discount": {}},
         rules=[_enabled_when({"op": "contains", "field": "tags", "value": "a"})],
     ),
+    "contains-on-field-with-list-is-empty": _document(
+        fields={"tags": {"isEmpty": ["array"]}, "discount": {}},
+        rules=[_enabled_when({"op": "contains", "field": "tags", "value": "a"})],
+    ),
     "in-on-array-field-inside-not-inside-either-of-branch": _document(
         fields={"tags": {"isEmpty": "array"}, "discount": {}},
         rules=[

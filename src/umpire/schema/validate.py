@@ -10,6 +10,7 @@ import math
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from ..types import IsEmptyStrategy
 from .errors import UmpireSchemaError
 
 _SCHEMA_MEMBERS = ("version", "conditions", "fields", "rules", "validators", "excluded")
@@ -20,6 +21,7 @@ _CONDITION_TYPES = frozenset({"boolean", "string", "number", "string[]", "number
 # ``fieldInCond`` tests a field scalar against a runtime condition array, so it
 # accepts exactly the array-shaped condition types.
 _ARRAY_CONDITION_TYPES = frozenset(t for t in _CONDITION_TYPES if t.endswith("[]"))
+_IS_EMPTY_STRATEGIES = frozenset(strategy.value for strategy in IsEmptyStrategy)
 _NON_ARRAY_IS_EMPTY = frozenset({"string", "number", "boolean", "object"})
 _RULE_TYPES = (
     "requires",
@@ -119,6 +121,12 @@ def _validate_field_def(field_name: Any, definition: Any) -> None:
 
     if "default" in definition and not _is_json_primitive(definition["default"]):
         raise UmpireSchemaError(f'Field "{field_name}" default must be a JSON primitive')
+
+    is_empty = definition.get("isEmpty")
+    if "isEmpty" in definition and (
+        not isinstance(is_empty, str) or is_empty not in _IS_EMPTY_STRATEGIES
+    ):
+        raise UmpireSchemaError(f"Invalid isEmpty strategy: {is_empty}")
 
 
 def _validate_rule(rule: Any, fields: Mapping[str, Any]) -> None:
