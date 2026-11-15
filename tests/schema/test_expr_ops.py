@@ -157,6 +157,11 @@ _MEMBERSHIP_CASES: dict[str, tuple[dict[str, object], dict[str, object], bool]] 
         {"f": [22]},
         False,
     ),
+    "contains-string-field-is-not-an-array": (
+        {"op": "contains", "field": "f", "value": "l"},
+        {"f": "lefty"},
+        False,
+    ),
     "contains-null-matches-null": (
         {"op": "contains", "field": "f", "value": None},
         {"f": [None]},
