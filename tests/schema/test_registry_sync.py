@@ -31,6 +31,7 @@ _MINIMAL_EXPRESSIONS: dict[str, dict[str, object]] = {
     "falsy": {"op": "falsy", "field": "email"},
     "in": {"op": "in", "field": "email", "values": ["someone@example.com"]},
     "notIn": {"op": "notIn", "field": "email", "values": ["someone@example.com"]},
+    "contains": {"op": "contains", "field": "email", "value": "someone@example.com"},
     "cond": _COND,
     "condEq": {"op": "condEq", "condition": "isAdmin", "value": True},
     "condIn": {"op": "condIn", "condition": "isAdmin", "values": [True]},
