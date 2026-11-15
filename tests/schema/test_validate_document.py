@@ -132,6 +132,9 @@ _CASES: dict[str, dict[str, object]] = {
     "in-with-object-values": _document(
         rules=[_enabled_when({"op": "in", "field": "email", "values": [{"a": 1}]})],
     ),
+    "check-min-with-nan-value": _document(
+        rules=[{"type": "check", "field": "discount", "op": "min", "value": float("nan")}],
+    ),
     "missing-version": {"fields": {"email": {}}, "rules": []},
     "excluded-entry-not-a-dictionary": _document(excluded=["custom"]),
     "excluded-entry-without-type": _document(

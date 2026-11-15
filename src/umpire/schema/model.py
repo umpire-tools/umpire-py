@@ -1,6 +1,7 @@
 """Schema model for Umpire."""
 
 import json
+import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
@@ -319,6 +320,8 @@ def _number(obj: Mapping[str, Any], key: str) -> int | float:
     value = obj.get(key)
     if not isinstance(value, (int, float)) or isinstance(value, bool):
         raise UmpireSchemaError(f'"{key}" must be a number')
+    if isinstance(value, float) and not math.isfinite(value):
+        raise UmpireSchemaError(f'"{key}" must be a finite number')
     return value
 
 
