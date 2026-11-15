@@ -17,6 +17,9 @@ _FIELD_DEF_MEMBERS = ("required", "default", "isEmpty")
 _CONDITION_DEF_MEMBERS = ("type", "description")
 _EXCLUDED_MEMBERS = ("type", "field", "description", "key", "signature")
 _CONDITION_TYPES = frozenset({"boolean", "string", "number", "string[]", "number[]"})
+# ``fieldInCond`` tests a field scalar against a runtime condition array, so it
+# accepts exactly the array-shaped condition types.
+_ARRAY_CONDITION_TYPES = frozenset(t for t in _CONDITION_TYPES if t.endswith("[]"))
 _RULE_TYPES = (
     "requires",
     "enabledWhen",

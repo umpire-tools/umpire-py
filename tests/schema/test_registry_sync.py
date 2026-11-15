@@ -10,7 +10,11 @@ registry entry fail the suite until it has a row here.
 import pytest
 
 from umpire import UmpireSchema
-from umpire.schema.validate import _EXPRESSION_MEMBERS, _RULE_TYPES
+from umpire.schema.validate import (
+    _ARRAY_CONDITION_TYPES,
+    _EXPRESSION_MEMBERS,
+    _RULE_TYPES,
+)
 
 _COND = {"op": "cond", "condition": "isAdmin"}
 
@@ -77,6 +81,24 @@ def test_expression_table_covers_every_expression_member() -> None:
 
 def test_rule_table_covers_every_rule_type() -> None:
     assert set(_MINIMAL_RULES) == set(_RULE_TYPES)
+
+
+@pytest.mark.parametrize("condition_type", sorted(_ARRAY_CONDITION_TYPES))
+def test_every_array_condition_type_loads_with_field_in_cond(condition_type: str) -> None:
+    document = _document(
+        [
+            {
+                "type": "enabledWhen",
+                "field": "email",
+                "when": {"op": "fieldInCond", "field": "email", "condition": "recipients"},
+            }
+        ]
+    )
+    document["conditions"] = {"recipients": {"type": condition_type}}
+
+    schema = UmpireSchema.from_json_obj(document)
+
+    assert len(schema.rules) == 1
 
 
 @pytest.mark.parametrize("op", list(_MINIMAL_EXPRESSIONS))
