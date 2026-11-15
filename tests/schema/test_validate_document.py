@@ -119,7 +119,15 @@ _CASES: dict[str, dict[str, object]] = {
     "boolean-version": _document(version=True),
     "default-value-member-on-field": _document(fields={"email": {"defaultValue": "x"}}),
     "missing-fields": {"version": 1, "rules": []},
+    "empty-fields": {"version": 1, "fields": {}, "rules": []},
     "missing-rules": {"version": 1, "fields": {"email": {}}},
+    "rule-reason-not-a-string": _document(rules=[{**_enabled_when(_COND_WHEN), "reason": 5}]),
+    "gt-with-string-value": _document(
+        rules=[_enabled_when({"op": "gt", "field": "discount", "value": "text"})]
+    ),
+    "and-exprs-not-an-array": _document(
+        rules=[_enabled_when({"op": "and", "exprs": "not-an-array"})]
+    ),
     "eq-without-value": _document(rules=[_enabled_when({"op": "eq", "field": "email"})]),
     "in-with-object-values": _document(
         rules=[_enabled_when({"op": "in", "field": "email", "values": [{"a": 1}]})],
